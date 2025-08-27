@@ -61,13 +61,6 @@ def set_bokeh_output(notebook=False):
     global IS_JUPYTER_NOTEBOOK
     IS_JUPYTER_NOTEBOOK = notebook
 
-
-def _windos_safe_filename(filename):
-    if sys.platform.startswith("win"):
-        return re.sub(r"[^a-zA-Z0-9,_-]", "_", filename.replace("=", "-"))
-    return filename
-
-
 def _bokeh_reset(filename=None):
     curstate().reset()
     if filename:
@@ -296,7 +289,6 @@ def plot(
     data: pd.DataFrame,
     baseline: pd.DataFrame,
     indicators: List[Union[pd.DataFrame, pd.Series]],
-    filename="",
     plot_width=None,
     plot_equity=True,
     plot_return=False,
@@ -320,9 +312,6 @@ def plot(
     # We need to reset global Bokeh state, otherwise subsequent runs of
     # plot() contain some previous run's cruft data (was noticed when
     # TestPlot.test_file_size() test was failing).
-    if not filename and not IS_JUPYTER_NOTEBOOK:
-        filename = _windos_safe_filename(str(results._strategy))
-    _bokeh_reset(filename)
 
     COLORS = [BEAR_COLOR, BULL_COLOR]
     BAR_WIDTH = 0.8
@@ -398,7 +387,6 @@ return this.labels[index] || "";
     NBSP = "\N{NBSP}" * 4  # noqa: E999
     ohlc_extreme_values = baseline[["High", "Low"]].copy(deep=False)
     ohlc_tooltips = [
-        ("x, y", NBSP.join(("$index", "$y{0,0.0[0000]}"))),
         (
             "OHLC",
             NBSP.join(

@@ -2935,7 +2935,6 @@ class Backtest:
             data=self._data,
             baseline=self._ohlc_ref_data,
             indicators=indicators,
-            filename=filename,
             plot_width=plot_width,
             plot_equity=plot_equity,
             plot_return=plot_return,
