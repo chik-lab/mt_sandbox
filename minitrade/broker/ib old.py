@@ -7,12 +7,12 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import requests
-import urllib3
+
 from minitrade.broker import Broker, BrokerAccount, OrderValidator
-from minitrade.broker.ibgateway import login_ibgateway, GatewayInstance
 from minitrade.trader import TradePlan
 from minitrade.utils.config import config
 from minitrade.utils.mtdb import MTDB
@@ -49,65 +49,6 @@ class InteractiveBrokers(Broker):
         self._last_ready_check = None
         self._last_ready_status = False
 
-    def _fetch_gateway_status(self) -> dict | None:
-        """Query the admin API for the gateway status for this account alias."""
-        try:
-            resp = requests.get(
-                f"http://{self._admin_host}:{self._admin_port}/ibgateway/{self.account.alias}",
-                timeout=5,
-            )
-            if resp.status_code == 200:
-                return resp.json()
-            return None
-        except Exception:
-            return None
-
-    def _get_gateway_instance(self) -> GatewayInstance:
-        """Ensure a gateway is running and return its instance (pid, port)."""
-        status = self._fetch_gateway_status()
-        if not status or not status.get('authenticated'):
-            # Attempt login/start (may be no-op if already running)
-            try:
-                login_ibgateway()
-            except Exception:
-                pass
-            # Poll admin API for readiness
-            deadline = datetime.now() + timedelta(seconds=120)
-            while datetime.now() < deadline:
-                status = self._fetch_gateway_status()
-                if status and status.get('port'):
-                    break
-                time.sleep(1)
-        if not status or 'port' not in status:
-            raise ConnectionError(f'IB gateway not ready for {self.account.alias}')
-        return GatewayInstance(status['pid'], status['port'])
-
-    def call_ibgateway(self, method: str, path: str, params: dict | None = None,
-                        json: Any | None = None, timeout: int = 10) -> Any:
-        """Call the Client Portal Web API via the account's gateway instance."""
-        instance = self._get_gateway_instance()
-        normalized = path if path.startswith('/') else f'/{path}'
-        base_https = f'https://localhost:{instance.port}/v1/api{normalized}'
-        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-        try:
-            resp = requests.request(
-                method=method, url=base_https, params=params, json=json, timeout=timeout, verify=False
-            )
-        except requests.exceptions.SSLError:
-            base_http = f'http://localhost:{instance.port}/v1/api{normalized}'
-            resp = requests.request(
-                method=method, url=base_http, params=params, json=json, timeout=timeout
-            )
-        if resp.status_code == 200:
-            # Some endpoints return 200 with no content
-            try:
-                return resp.json()
-            except ValueError:
-                return None
-        if resp.status_code == 204:
-            return None
-        raise RuntimeError(f'Request {path} returned {resp.status_code} {resp.text}')
-
     @property
     def account_id(self):
         if not self._account_id:
@@ -116,74 +57,78 @@ class InteractiveBrokers(Broker):
                 self._account_id = accounts[0]['id']
         return self._account_id
 
-    
+    def __call_ibgateway_admin(self, method: str, path: str, params: dict | None = None):
+        '''Call the ibgateway's admin API'''
+        url = f'http://{self._admin_host}:{self._admin_port}{path}'
+        resp = requests.request(method=method, url=url, params=params)
+        if resp.status_code == 200:
+            return resp.json()
+        elif resp.status_code >= 400:
+            raise RuntimeError(f'Request {path} returned {resp.status_code} {resp.text}')
+
+    def __call_ibgateway(
+            self, method: str, path: str, params: dict | None = None, json: Any | None = None, timeout: int = 20) -> Any:
+        '''Call the ibgateway's REST API'''
+        if self._port:
+            url = f'http://localhost:{self._port}/v1/api{path}'
+            resp = requests.request(method=method, url=url, params=params, json=json, timeout=timeout)
+            if resp.status_code == 200:
+                return resp.json()
+            elif resp.status_code >= 400:
+                raise RuntimeError(f'Request {path} returned {resp.status_code} {resp.text}')
+        else:
+            raise RuntimeError(f'IB gateway port is not set for request {method} {path}')
+
     def is_ready(self) -> bool:
         if self._last_ready_check and datetime.now() - self._last_ready_check < timedelta(seconds=1):
             self._last_ready_check = datetime.now()
             return self._last_ready_status
-        # Auth and login
-        login_status = None
-        for _ in range(3):
-            try:
-                login_status = self.call_ibgateway('GET', '/iserver/auth/status', timeout=5)
-                if login_status:
-                    break
-            except Exception:
-                pass
-            time.sleep(60)
-        if not login_status:
-            try:
-                login_ibgateway()
-            except Exception:
-                pass
-            # Retry after triggering login
-            for _ in range(3):
-                try:
-                    login_status = self.call_ibgateway('GET', '/iserver/auth/status', timeout=5)
-                    if login_status:
-                        break
-                except Exception:
-                    pass
-                time.sleep(60)
-        #After authentication, get account info
-        for _ in range(10):
-            status = self._fetch_gateway_status()
-            if status and status['authenticated']:
+        try:
+            status = self.__call_ibgateway_admin('GET', f'/ibgateway/{self.account.alias}')
+            if status and status['account'] == self.account.username:
                 self._port = status['port']
-                self._last_ready_check = datetime.now()
-                self._last_ready_status = True
-                return True
-            else:
-                time.sleep(1)
-        # Fallback: set port from admin status if available
-        status = self._fetch_gateway_status()
-        if status and 'port' in status:
-            self._port = status['port']
+                if status['authenticated']:
+                    self._last_ready_check = datetime.now()
+                    self._last_ready_status = True
+                    return True
+                else:
+                    # if not authenticated, try reauthenticate
+                    self.__call_ibgateway('POST', '/iserver/reauthenticate')
+                    for _ in range(10):
+                        status = self.__call_ibgateway_admin('GET', f'/ibgateway/{self.account.alias}')
+                        if status and status['authenticated']:
+                            self._port = status['port']
+                            self._last_ready_check = datetime.now()
+                            self._last_ready_status = True
+                            return True
+                        else:
+                            time.sleep(1)
+        except Exception:
+            logger.exception(f'Checking broker status failed for {self.account.alias}')
         self._last_ready_check = datetime.now()
-        self._last_ready_status = True
-        return bool(self._port)
+        self._last_ready_status = False
+        return False
 
     def connect(self):
         if not self.is_ready():
             try:
-                urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-                status = self.call_ibgateway('PUT', "/iserver/auth/status")
+                status = self.__call_ibgateway_admin('PUT', f'/ibgateway/{self.account.alias}')
                 self._port = status['port']
             except Exception as e:
                 raise ConnectionError(f'Login failed for {self.account.alias}') from e
 
     def disconnect(self):
         try:
-            self.call_ibgateway('DELETE', f'/ibgateway/{self.account.alias}')
+            self.__call_ibgateway_admin('DELETE', f'/ibgateway/{self.account.alias}')
             self._port = None
         except Exception:
             logger.exception(f'Logout failed for IB account {self.account.alias}')
 
     def get_account_info(self) -> Any:
-        accounts = self.call_ibgateway('GET', '/portfolio/accounts')
+        accounts = self.__call_ibgateway('GET', '/portfolio/accounts')
         for account in accounts:
-            account['ledger'] = self.call_ibgateway('GET', f'/portfolio/{account["id"]}/ledger')
-            account['performance'] = self.call_ibgateway(
+            account['ledger'] = self.__call_ibgateway('GET', f'/portfolio/{account["id"]}/ledger')
+            account['performance'] = self.__call_ibgateway(
                 'POST', f'/pa/performance', json={'acctIds': [account['id']], 'freq': 'D'})
         return accounts
 
@@ -192,7 +137,7 @@ class InteractiveBrokers(Broker):
         for account in self.get_account_info():
             i = 0
             while True:
-                page = self.call_ibgateway('GET', f'/portfolio/{account["id"]}/positions/{i}')
+                page = self.__call_ibgateway('GET', f'/portfolio/{account["id"]}/positions/{i}')
                 portfolio.extend(page)
                 if len(page) < 100:
                     break
@@ -207,7 +152,7 @@ class InteractiveBrokers(Broker):
                      'accountCode', 'company_name', 'contract_description_1', 'contract_description_2', 'sec_type',
                      'listing_exchange', 'conid', 'conidEx', 'open_close', 'directed_exchange', 'clearing_id',
                      'clearing_name', 'liquidation_trade', 'is_event_trading', 'order_ref', 'account_allocation_name']
-        trades = self.call_ibgateway('GET', '/iserver/account/trades')
+        trades = self.__call_ibgateway('GET', '/iserver/account/trades')
         MTDB.save('IbTrade', trades, on_conflict='update', whitelist=whitelist)
         return pd.DataFrame(trades)
 
@@ -219,7 +164,7 @@ class InteractiveBrokers(Broker):
             'filledQuantity', 'totalSize', 'companyName', 'status', 'order_ccp_status', 'avgPrice', 'origOrderType',
             'supportsTaxOpt', 'lastExecutionTime', 'orderType', 'bgColor', 'fgColor', 'order_ref', 'timeInForce',
             'lastExecutionTime_r', 'side', 'order_cancellation_by_system_reason', 'outsideRTH', 'price']
-        orders = self.call_ibgateway('GET', '/iserver/account/orders')
+        orders = self.__call_ibgateway('GET', '/iserver/account/orders')
         if orders and orders['orders']:
             MTDB.save('IbOrder', orders['orders'], on_conflict='update', whitelist=whitelist)
             return pd.DataFrame(orders['orders'])
@@ -245,14 +190,14 @@ class InteractiveBrokers(Broker):
                 'isClose': False
             }
             results = []
-            result = self.call_ibgateway(
+            result = self.__call_ibgateway(
                 'POST', f'/iserver/account/{self.account_id}/orders', json={'orders': [ib_order]})
             results.append(result)
             print(f'Submit order response: {result}')
             # Sometimes IB needs additional confirmation before submitting order. Confirm yes to the message.
             # https://interactivebrokers.github.io/cpwebapi/endpoints
             while 'id' in result[0]:
-                result = self.call_ibgateway('POST', f'/iserver/reply/{result[0]["id"]}', json={'confirmed': True})
+                result = self.__call_ibgateway('POST', f'/iserver/reply/{result[0]["id"]}', json={'confirmed': True})
                 results.append(result)
                 print(f'Confirm order response: {result}')
             broker_order_id = result[0]['order_id']
@@ -273,7 +218,7 @@ class InteractiveBrokers(Broker):
                 if order['status'] in ['Cancelled', 'Filled']:
                     continue
                 try:
-                    result = self.call_ibgateway(
+                    result = self.__call_ibgateway(
                         'DELETE', f'/iserver/account/{self.account_id}/order/{order_id}')
                     print(f'Cancel order {order_id}: {result}')
                 except Exception as e:
@@ -298,7 +243,7 @@ class InteractiveBrokers(Broker):
 
     @lru_cache(maxsize=100)
     def resolve_tickers(self, ticker_css) -> dict[str, list]:
-        result = self.call_ibgateway('GET', '/trsrv/stocks', {'symbols': ticker_css})
+        result = self.__call_ibgateway('GET', '/trsrv/stocks', {'symbols': ticker_css})
         for k, v in result.items():
             # sort ticker and put that of US market first
             options = sorted(v, key=lambda v: not v['contracts'][0].get('isUS'))
@@ -332,7 +277,7 @@ class InteractiveBrokers(Broker):
 
     def daily_bar(self, conid: str, start: str, end: str = None) -> pd.DataFrame:
         period = (datetime.now().date() - datetime.strptime(start, '%Y-%m-%d').date()).days
-        bars = self.call_ibgateway(
+        bars = self.__call_ibgateway(
             'GET', f'/iserver/marketdata/history?conid={conid}&period={period}d&bar=1d&outsideRth=0')
         df = pd.DataFrame(bars['data'])
         df.rename(columns={'o': 'Open', 'c': 'Close', 'h': 'High', 'l': 'Low', 'v': 'Volume'}, inplace=True)
@@ -344,7 +289,7 @@ class InteractiveBrokers(Broker):
         return df
 
     def spot(self, conids: list[str]) -> pd.DataFrame:
-        prices = self.call_ibgateway('GET', f'/iserver/marketdata/snapshot?conids={",".join(str(conids))}')
+        prices = self.__call_ibgateway('GET', f'/iserver/marketdata/snapshot?conids={",".join(str(conids))}')
         df = pd.DataFrame(prices)
         return df
 

@@ -53,9 +53,9 @@ class SourceConfig(BaseModel):
 
 
 class BrokerConfigIB(BaseModel):
-    gateway_admin_host: str = '127.0.0.1'
-    gateway_admin_port: int = 6667
-    gateway_admin_log_level: str = 'info'
+    gateway_host: str = '127.0.0.1'
+    gateway_port: int = 5000
+    gateway_log_level: str = 'info'
 
 
 class BrokerConfig(BaseModel):
@@ -123,7 +123,8 @@ if 'pytest' not in sys.modules:
     try:
         config = GlobalConfig.load()
     except Exception:
-        pass
+        # Fall back to default config so imports won't fail
+        config = GlobalConfig()
 else:
     assert os.path.exists(os.path.expanduser('~/.minitrade/config.pytest.yaml'))
     config = GlobalConfig.load('~/.minitrade/config.pytest.yaml')

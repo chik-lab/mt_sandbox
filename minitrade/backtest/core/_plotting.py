@@ -82,12 +82,12 @@ def lightness(color, lightness=.94):
 _MAX_CANDLES = 10_000
 
 
-def _maybe_resample_data(resample_rule, data, baseline, indicators, equity_data, trades, bnh_perf):
+def _maybe_resample_data(resample_rule, data, baseline, indicators, equity_data, trades):
     if isinstance(resample_rule, str):
         freq = resample_rule
     else:
         if resample_rule is False or len(baseline) <= _MAX_CANDLES:
-            return data, baseline, indicators, equity_data, trades, bnh_perf
+            return data, baseline, indicators, equity_data, trades
 
         freq_minutes = pd.Series({
             "1T": 1,
@@ -136,17 +136,15 @@ def _maybe_resample_data(resample_rule, data, baseline, indicators, equity_data,
         return f
 
     if len(trades):  # Avoid pandas "resampling on Int64 index" error
-        trades = trades.assign(count=1).resample(freq, on='ExitTime', label='right').agg(dict(
-            TRADES_AGG,
-            ReturnPct=_weighted_returns,
-            count='sum',
-            EntryBar=_group_trades('EntryTime'),
-            ExitBar=_group_trades('ExitTime'),
-        )).dropna()
+        trades = trades.assign(count=1).resample(freq, on='ExitTime', label='right').agg({
+            **TRADES_AGG,
+            'ReturnPct': _weighted_returns,
+            'count': 'sum',
+            'EntryBar': _group_trades('EntryTime'),
+            'ExitBar': _group_trades('ExitTime'),
+        }).dropna()
 
-    bnh_perf = bnh_perf.resample(freq, label='right').last().dropna()
-
-    return data, baseline, indicators, equity_data, trades, bnh_perf
+    return data, baseline, indicators, equity_data, trades
 
 
 def plot(*, results: pd.Series,
@@ -155,8 +153,8 @@ def plot(*, results: pd.Series,
          indicators: List[Union[pd.DataFrame, pd.Series]],
          filename='', plot_width=None,
          plot_equity=True, plot_return=False, plot_pl=True,
-         plot_volume=False, plot_drawdown=False, plot_trades=True,
-         smooth_equity=False, relative_equity=True,
+         plot_volume=True, plot_drawdown=False, plot_trades=True,
+         smooth_equity=False,
          superimpose=False, resample=True,
          reverse_indicators=True,
          show_legend=True, open_browser=True,
@@ -176,30 +174,66 @@ def plot(*, results: pd.Series,
     BAR_WIDTH = .8
 
     assert baseline.index.equals(results['_equity_curve'].index)
-    equity_data = results['_equity_curve'].copy(deep=False)
+    equity_data = results['_equity_curve'].copy()
     trades = results['_trades']
 
-    plot_volume = plot_volume and not baseline.Volume.isnull().all()
-    plot_equity = plot_equity and not trades.empty
-    plot_return = plot_return and not trades.empty
-    plot_pl = plot_pl and not trades.empty
+    # Only show stocks/indicators that have trade records
+    traded_tickers: set = set()
+    try:
+        if isinstance(trades, pd.DataFrame) and 'Ticker' in trades.columns:
+            traded_tickers = set(trades['Ticker'].dropna().unique().tolist())
+    except Exception:
+        traded_tickers = set()
+
+    # Filter universe data to traded tickers if available
+    try:
+        if traded_tickers and isinstance(data.columns, pd.MultiIndex):
+            tickers_in_data = [t for t in data.columns.levels[0] if t in traded_tickers]
+            if tickers_in_data:
+                data = data.loc[:, (tickers_in_data, slice(None))]
+    except Exception:
+        pass
+
+    # Determine tickers to plot for universe and for gating decisions
+    tickers_to_plot = []
+    try:
+        if isinstance(data.columns, pd.MultiIndex):
+            available_tickers = list(data.columns.levels[0])
+            tickers_to_plot = [t for t in available_tickers if (not traded_tickers or t in traded_tickers)]
+    except Exception:
+        tickers_to_plot = []
+
     is_datetime_index = isinstance(baseline.index, pd.DatetimeIndex)
 
     from .lib import OHLCV_AGG
 
-    # ohlc df may contain many columns. We're only interested in, and pass on to Bokeh, these
-    if 'Volume' not in baseline:
-        baseline['Volume'] = 0
-    baseline = baseline[list(OHLCV_AGG.keys())].copy(deep=False)
+    # Handle multi-symbol baseline data
+    if isinstance(baseline.columns, pd.MultiIndex):
+        # Store the full multi-symbol data for later use
+        baseline_multi = baseline
+        
+        # Create a simple baseline for the main chart (using first symbol but simplified)
+        first_symbol = baseline.columns.get_level_values(0)[0]
+        baseline_main = baseline.loc[:, (first_symbol, slice(None))]
+        baseline_main.columns = baseline_main.columns.get_level_values(1)  # Remove symbol level
+        
+        # Ensure we have the required OHLCV columns
+        if 'Volume' not in baseline_main:
+            baseline_main['Volume'] = 0
+        baseline_main = baseline_main[list(OHLCV_AGG.keys())].copy(deep=False)
+        baseline = baseline_main
+    else:
+        # Original single-symbol logic
+        if 'Volume' not in baseline:
+            baseline['Volume'] = 0
+        baseline = baseline[list(OHLCV_AGG.keys())].copy(deep=False)
+        baseline_multi = None
 
-    # Buy-and-hold cumulative returns
-    bnh_perf = baseline['Close'] / baseline['Close'].iloc[results['_trade_start_bar']]
-    bnh_perf.iloc[:results['_trade_start_bar']] = 1.0
 
     # Limit data to max_candles
     if is_datetime_index:
-        data, baseline, indicators, equity_data, trades, bnh_perf = _maybe_resample_data(
-            resample, data, baseline, indicators, equity_data, trades, bnh_perf)
+        data, baseline, indicators, equity_data, trades = _maybe_resample_data(
+            resample, data, baseline, indicators, equity_data, trades)
 
     baseline.index.name = None  # Provides source name @index
     baseline['datetime'] = baseline.index  # Save original, maybe datetime index
@@ -210,6 +244,7 @@ def plot(*, results: pd.Series,
     new_bokeh_figure = partial(
         _figure,
         x_axis_type='linear',
+        y_axis_type='linear',
         width=plot_width,
         height=400,
         tools="xpan,xwheel_zoom,box_zoom,undo,redo,reset,save",
@@ -218,16 +253,14 @@ def plot(*, results: pd.Series,
 
     pad = (index[-1] - index[0]) / 20
 
-    _kwargs = dict(x_range=Range1d(index[0], index[-1],
-                                   min_interval=10,
-                                   bounds=(index[0] - pad,
-                                           index[-1] + pad))) if index.size > 1 else {}
-    fig_ohlc = new_bokeh_figure(**_kwargs)
+    if index.size > 1:
+        fig_ohlc = new_bokeh_figure(x_range=Range1d(int(index[0]), int(index[-1])))
+    else:
+        fig_ohlc = new_bokeh_figure()
     figs_above_ohlc, figs_below_ohlc = [], []
 
     source = ColumnDataSource(baseline)
-    source.add((baseline.Close >= baseline.Open).values.astype(np.uint8).astype(str), 'inc')
-    source.add(bnh_perf, 'bnh_perf')
+    source.add((baseline.Close >= baseline.Open).astype(np.uint8).astype(str), 'inc')
 
     trade_source = ColumnDataSource(dict(
         index=trades['ExitBar'],
@@ -297,99 +330,106 @@ return this.labels[index] || "";
             renderers=renderers, formatters=formatters,
             tooltips=tooltips, mode='vline' if vline else 'mouse'))
 
-    def _plot_equity_section(is_return=False):
-        """Equity section"""
-        # Max DD Dur. line
-        equity = equity_data['Equity'].copy()
-        dd_end = equity_data['DrawdownDuration'].idxmax()
-        if np.isnan(dd_end):
-            dd_start = dd_end = equity.index[0]
-        else:
-            dd_start = equity[:dd_end].idxmax()
-            # If DD not extending into the future, get exact point of intersection with equity
-            if dd_end != equity.index[-1]:
-                dd_end = np.interp(equity[dd_start],
-                                   (equity[dd_end - 1], equity[dd_end]),
-                                   (dd_end - 1, dd_end))
-
+    def _plot_broker_session(is_return=False):
+        """Broker session showing cash and total value"""
+        cash = equity_data['Cash'].copy() if 'Cash' in equity_data.columns else None
+        total_value = equity_data['Equity'].copy()  # Total portfolio value
         if smooth_equity:
             interest_points = pd.Index([
                 # Beginning and end
-                equity.index[0], equity.index[-1],
-                # Peak equity and peak DD
-                equity.idxmax(), equity_data['DrawdownPct'].idxmax(),
-                # Include max dd end points. Otherwise the MaxDD line looks amiss.
-                dd_start, int(dd_end), min(int(dd_end + 1), equity.size - 1),
+                total_value.index[0], total_value.index[-1],
+                # Peak and valley points
+                total_value.idxmax(), total_value.idxmin(),
+                cash.idxmax() if not cash.empty else total_value.index[0],
             ])
             select = pd.Index(trades['ExitBar']).union(interest_points)
             select = select.unique().dropna()
-            equity = equity.iloc[select].reindex(equity.index)
-            equity.interpolate(inplace=True)
-
-        assert equity.index.equals(equity_data.index)
-
-        if relative_equity:
-            equity /= equity.iloc[0]
+            total_value = total_value.iloc[select].reindex(total_value.index)
+            cash = cash.iloc[select].reindex(cash.index)
+          
+            total_value.interpolate(inplace=True)
+            cash.interpolate(inplace=True)
+            
         if is_return:
-            equity -= equity.iloc[0]
+            initial_total = total_value.iloc[0]
+            initial_cash = cash.iloc[0]
+            total_value -= initial_total
+            cash -= initial_cash
 
-        yaxis_label = 'Return' if is_return else 'Equity'
-        source_key = 'eq_return' if is_return else 'equity'
-        source.add(equity, source_key)
+        yaxis_label = 'Return' if is_return else 'Broker Session'
+        
+        # Add data to source
+        source.add(total_value, 'total_value')
+        source.add(cash, 'cash')
+        
         fig = new_indicator_figure(
             y_axis_label=yaxis_label,
             **({} if plot_drawdown else dict(height=110)))
 
-        # High-watermark drawdown dents
-        fig.patch('index', 'equity_dd',
-                  source=ColumnDataSource(dict(
-                      index=np.r_[index, index[::-1]],
-                      equity_dd=np.r_[equity, equity.cummax()[::-1]]
-                  )),
-                  fill_color='#ffffea', line_color='#ffcb66')
+        # Format settings - always show absolute dollar values as raw numbers
+        tooltip_format_total = '@total_value{$ 0,0}'
+        tooltip_format_cash = '@cash{$ 0,0}'
+        tick_format = '$ 0,0'
 
-        # Equity line
-        r = fig.line('index', source_key, source=source, line_width=1.5, line_alpha=1, legend_label='Strategy')
-        if relative_equity:
-            tooltip_format = f'@{source_key}{{+0,0.[000]%}}'
-            tick_format = '0,0.[00]%'
-            legend_format = '{:,.0f}%'
-        else:
-            tooltip_format = f'@{source_key}{{$ 0,0}}'
-            tick_format = '$ 0.0 a'
-            legend_format = '${:,.0f}'
-        set_tooltips(fig, [(yaxis_label, tooltip_format)], renderers=[r])
+        # Plot lines
+        r1 = fig.line('index', 'total_value', source=source, line_width=2, 
+                     line_alpha=1, color='blue', legend_label='Total Value')
+        r2 = fig.line('index', 'cash', source=source, line_width=1.5, 
+                     line_alpha=0.8, color='red', legend_label='Cash')
+        
+
+        # Set tooltips - use only one renderer to avoid duplicate legends
+        set_tooltips(fig, [
+            ('Total Value', tooltip_format_total),
+            ('Cash', tooltip_format_cash),
+        ], renderers=[r1])
+        
         fig.yaxis.formatter = NumeralTickFormatter(format=tick_format)
 
-        # Buy-and-hold reference performance
-        if relative_equity and not is_return:
-            fig.line('index', 'bnh_perf', source=source, line_width=1,
-                     line_alpha=1, color='#666666', legend_label='Buy&Hold')
-            set_tooltips(fig, [(yaxis_label, tooltip_format), ('Buy&Hold', f'@bnh_perf{{+0,0.[000]%}}')], renderers=[r])
-
-        # Peaks
-        argmax = equity.idxmax()
-        fig.scatter(argmax, equity[argmax],
-                    legend_label='Peak ({})'.format(
-                        legend_format.format(equity[argmax] * (100 if relative_equity else 1))),
+        # Peak markers
+        argmax_total = total_value.idxmax()
+        fig.scatter(argmax_total, total_value[argmax_total],
                     color='cyan', size=8)
-        fig.scatter(index[-1], equity.values[-1],
-                    legend_label='Final ({})'.format(
-                        legend_format.format(equity.iloc[-1] * (100 if relative_equity else 1))),
+        
+        # Final values
+        fig.scatter(index[-1], total_value.iloc[-1],
                     color='blue', size=8)
 
-        if not plot_drawdown:
-            drawdown = equity_data['DrawdownPct']
-            argmax = drawdown.idxmax()
-            fig.scatter(argmax, equity[argmax],
-                        legend_label='Max Drawdown (-{:.1f}%)'.format(100 * drawdown[argmax]),
-                        color='red', size=8)
-        dd_timedelta_label = baseline['datetime'].iloc[int(round(dd_end))] - baseline['datetime'].iloc[dd_start]
-        fig.line([dd_start, dd_end], equity.iloc[dd_start],
-                 line_color='red', line_width=2,
-                 legend_label=f'Max Dd Dur. ({dd_timedelta_label})'
-                 .replace(' 00:00:00', '')
-                 .replace('(0 days ', '('))
+        # Set reasonable tick intervals to prevent label cramming - do this after data is plotted
+        # Calculate data range from the actual data values
+        total_min = float(total_value.min()) if hasattr(total_value, 'min') else 0
+        total_max = float(total_value.max()) if hasattr(total_value, 'max') else 100000
+        cash_min = float(cash.min()) if cash is not None and hasattr(cash, 'min') else total_min
+        cash_max = float(cash.max()) if cash is not None and hasattr(cash, 'max') else total_max
+        
+        data_min = min(total_min, cash_min)
+        data_max = max(total_max, cash_max)
+        value_range = abs(data_max - data_min) if data_max != data_min else abs(data_max)
+        
+        if value_range > 0:
+            # Aim for 5-8 ticks maximum
+            desired_interval = value_range / 6
+            # Round to nice numbers
+            if desired_interval > 10000:
+                tick_interval = round(desired_interval / 10000) * 10000
+            elif desired_interval > 1000:
+                tick_interval = round(desired_interval / 1000) * 1000
+            elif desired_interval > 100:
+                tick_interval = round(desired_interval / 100) * 100
+            else:
+                tick_interval = max(1, round(desired_interval))
+            
+            # Set the ticker to use our calculated interval
+            from bokeh.models import FixedTicker
+            if tick_interval > 0:
+                start_tick = (data_min // tick_interval) * tick_interval
+                end_tick = ((data_max // tick_interval) + 1) * tick_interval
+                ticks = list(range(int(start_tick), int(end_tick + tick_interval), int(tick_interval)))
+                if len(ticks) > 10:  # Fallback if too many ticks
+                    ticks = ticks[::2]  # Take every other tick
+                if len(ticks) >= 2:  # Only set if we have reasonable ticks
+                    fig.yaxis.ticker = FixedTicker(ticks=ticks)
+
 
         figs_above_ohlc.append(fig)
 
@@ -440,23 +480,25 @@ return this.labels[index] || "";
 
     def _plot_pl_section():
         """Profit/Loss markers section"""
-        fig = new_indicator_figure(y_axis_label="Profit / Loss")
+        fig = new_indicator_figure(y_axis_label="Profit / Loss", y_axis_type="linear")
         fig.add_layout(Span(location=0, dimension='width', line_color='#666666',
                             line_dash='dashed', line_width=1))
         returns_long = np.where(trades['Size'] > 0, trades['ReturnPct'], np.nan)
         returns_short = np.where(trades['Size'] < 0, trades['ReturnPct'], np.nan)
-        size = trades['Size'].abs()
-        size = np.interp(size, (size.min(), size.max()), (8, 20))
+        size = (trades['Size'] * trades['EntryPrice']).abs().astype(int)
+        size = np.interp(size, (size.min(), size.max()), (4, 12))
+        pos_value = (trades['Size'] * trades['EntryPrice']).abs()
         trade_source.add(returns_long, 'returns_long')
         trade_source.add(returns_short, 'returns_short')
+        trade_source.add(pos_value, 'position_value')
         trade_source.add(size, 'marker_size')
         if 'count' in trades:
             trade_source.add(trades['count'], 'count')
         r1 = fig.scatter('index', 'returns_long', source=trade_source, fill_color=cmap,
-                         marker='triangle', line_color='black', size='marker_size')
+                         marker='circle', size='marker_size')
         r2 = fig.scatter('index', 'returns_short', source=trade_source, fill_color=cmap,
-                         marker='inverted_triangle', line_color='black', size='marker_size')
-        tooltips = [("Ticker", "@ticker"), ("Size", "@size{0,0}")]
+                         marker='star', size='marker_size')
+        tooltips = [("Ticker", "@ticker"), ("Pos.Value", "@position_value{$ 0,0.00}")]
         if 'count' in trades:
             tooltips.append(("Count", "@count{0,0}"))
         set_tooltips(fig, tooltips + [("P/L", "@returns_long{+0.[000]%}")],
@@ -495,7 +537,7 @@ return this.labels[index] || "";
 
         df2 = (baseline.assign(_width=1).set_index('datetime')
                .resample(resample_rule, label='left')
-               .agg(dict(OHLCV_AGG, _width='count')))
+               .agg({**OHLCV_AGG, '_width': 'count'}))
 
         # Check if resampling was downsampling; error on upsampling
         orig_freq = _data_period(baseline['datetime'])
@@ -520,17 +562,11 @@ return this.labels[index] || "";
         fig_ohlc.vbar('index', '_width', 'Open', 'Close', source=source2, line_color=None,
                       fill_color=factor_cmap('inc', colors_lighter, ['0', '1']))
 
-    def _plot_ohlc():
-        """Main OHLC bars"""
-        fig_ohlc.segment('index', 'High', 'index', 'Low', source=source, color="black")
-        r = fig_ohlc.vbar('index', BAR_WIDTH, 'Open', 'Close', source=source,
-                          line_color="black", fill_color=inc_cmap)
-        return r
 
     def _plot_ohlc_trades():
         """Trade entry / exit markers on OHLC plot"""
-        trade_source.add(trades[['EntryBar', 'ExitBar']].values.tolist(), 'position_lines_xs')
-        trade_source.add(trades[['EntryPrice', 'ExitPrice']].values.tolist(), 'position_lines_ys')
+        trade_source.add(trades[['EntryBar', 'ExitBar']].to_numpy().tolist(), 'position_lines_xs')
+        trade_source.add(trades[['EntryPrice', 'ExitPrice']].to_numpy().tolist(), 'position_lines_ys')
         fig_ohlc.multi_line(xs='position_lines_xs', ys='position_lines_ys',
                             source=trade_source, line_color=trades_cmap,
                             legend_label=f'Trades ({len(trades)})',
@@ -540,7 +576,8 @@ return this.labels[index] || "";
         fig = fig_ohlc
         ohlc_colors = colorgen()
         label_tooltip_pairs = []
-        for ticker in data.columns.levels[0][:10]:
+        # Respect traded tickers only (if provided)
+        for ticker in tickers_to_plot[:10]:
             color = next(ohlc_colors)
             source_name = ticker
             arr = data.loc[:, (ticker, 'Close')]
@@ -552,8 +589,8 @@ return this.labels[index] || "";
                 legend_label=source_name, line_color=color,
                 line_width=2)
         ohlc_tooltips.extend(label_tooltip_pairs)
-        if len(data.columns.levels[0]) > 10:
-            fig.line(0, 0, legend_label=f'{len(data.columns.levels[0])-10} more tickers hidden', line_color='black')
+        if len(tickers_to_plot) > 10:
+            fig.line(0, 0, legend_label=f'{len(tickers_to_plot)-10} more tickers hidden', line_color='black')
         fig.legend.orientation = "horizontal"
         fig.legend.background_fill_alpha = 0.8
         fig.legend.border_line_alpha = 0
@@ -586,8 +623,17 @@ return this.labels[index] || "";
                 continue
 
             is_overlay = value.attrs['overlay']
+            
+            # Skip overlay indicators for multi-symbol data since they'll be plotted on individual charts
+            if is_overlay and baseline_multi is not None:
+                continue
             is_scatter = value.attrs['scatter']
+            # If indicator is per-ticker DataFrame, restrict to traded tickers if present
             if isinstance(value, pd.DataFrame):
+                if traded_tickers:
+                    cols = [c for c in value.columns if c in traded_tickers]
+                    if cols:
+                        value = value[cols]
                 legend_label = (
                     [LegendStr(f'{value.attrs["name"]} {col}') for col in value.columns]
                     if value.attrs["name"]
@@ -620,7 +666,7 @@ return this.labels[index] || "";
                             'index', source_name, source=source,
                             legend_label=legend_label[j-1], color=color,
                             line_color='black', fill_alpha=.8,
-                            marker='circle', radius=BAR_WIDTH / 2 * 1.5)
+                             size=BAR_WIDTH / 2 * 1.5)
                     else:
                         fig.line(
                             'index', source_name, source=source,
@@ -631,7 +677,7 @@ return this.labels[index] || "";
                         r = fig.scatter(
                             'index', source_name, source=source,
                             legend_label=legend_label[j-1], color=color,
-                            marker='circle', radius=BAR_WIDTH / 2 * .9)
+                            size=BAR_WIDTH / 2 * .9)
                     else:
                         r = fig.line(
                             'index', source_name, source=source,
@@ -650,23 +696,298 @@ return this.labels[index] || "";
             if is_overlay:
                 ohlc_tooltips.extend(label_tooltip_pairs)
             else:
-                set_tooltips(fig, label_tooltip_pairs, vline=True, renderers=[r])
+                # Skip adding tooltips for multi-symbol data since unified tooltip system will handle them
+                if baseline_multi is None:
+                    set_tooltips(fig, label_tooltip_pairs, vline=True, renderers=[r])
                 # If the sole indicator line on this figure,
                 # have the legend only contain text without the glyph
                 if len(value) == 1:
                     fig.legend.glyph_width = 0
         return indicator_figs
 
+    def _plot_top_ohlc():
+        """Plot multiple symbols as line on the same OHLC chart, plot OHLC bars if only one symbol"""
+        if baseline_multi is None:
+            return None
+        
+        # Get unique symbols
+        symbols = baseline_multi.columns.get_level_values(0).unique()
+        
+        # Plot each symbol with different colors
+        colors = ['red', 'blue', 'green', 'orange', 'purple', 'brown', 'pink', 'gray']
+        color_idx = 0
+        first_line = None
+        if len(symbols)==1:
+            fig_ohlc.segment('index', 'High', 'index', 'Low', source=source, color="black")
+            r = fig_ohlc.vbar('index', BAR_WIDTH, 'Open', 'Close', source=source,
+                              line_color="black", fill_color=inc_cmap)
+            return r
+        elif len(symbols)>1:
+            for symbol in symbols[:8]:  # Limit to 8 symbols to avoid clutter
+                symbol_data = baseline_multi.loc[:, (symbol, 'Close')]
+                symbol_data = symbol_data.reset_index(drop=True)
+                
+                # Add to source
+                source.add(symbol_data, f'{symbol}_Close')
+                
+                # Plot line
+                color = colors[color_idx % len(colors)]
+                line = fig_ohlc.line('index', f'{symbol}_Close', source=source, 
+                                    line_color=color, line_width=1, 
+                                    legend_label=symbol, line_alpha=0.7)
+                
+                # Store the first line
+                if first_line is None:
+                    first_line = line
+                
+                color_idx += 1
+        
+            # Add legend
+            if len(symbols) > 1:
+                fig_ohlc.legend.orientation = "horizontal"
+                fig_ohlc.legend.background_fill_alpha = 0.8
+                fig_ohlc.legend.border_line_alpha = 0
+            
+            return first_line
+    
+    
+    def _create_unified_legend(symbol_fig, symbol, symbol_source, indicators, ohlc_renderer=None):
+        """Create a single unified dynamic tooltip showing both OHLCV and indicator values"""
+        
+        # Build comprehensive tooltip list starting with OHLCV
+        unified_tooltips = [
+            ('Symbol', symbol),
+            ('Open', '@Open{0,0.0[0000]}'),
+            ('High', '@High{0,0.0[0000]}'),
+            ('Low', '@Low{0,0.0[0000]}'),
+            ('Close', '@Close{0,0.0[0000]}'),
+            ('Volume', '@Volume{0,0}'),
+        ]
+        
+        # Add indicators to the symbol source and tooltip list
+        for i, value in enumerate(indicators):
+            # Only plot indicators with plot=True and overlay=True (same logic as before)
+            if not value.attrs.get('plot') or value.ndim > 2:
+                continue
+                
+            is_overlay = value.attrs.get('overlay')
+            if not is_overlay:
+                continue
+            
+            is_scatter = value.attrs.get('scatter', False)
+            
+            # Handle indicators for this specific symbol
+            if isinstance(value, pd.DataFrame):
+                if symbol in value.columns:
+                    symbol_indicator = value[symbol]
+                    indicator_name = value.attrs.get("name", symbol)
+                else:
+                    continue
+            else:
+                symbol_indicator = value
+                indicator_name = value.attrs.get("name") or value.name or "Indicator"
+            
+            # Add indicator data to symbol source
+            source_name = f'{indicator_name}_{i}'
+            if symbol_indicator.dtype == bool:
+                symbol_indicator = symbol_indicator.astype(int)
+            
+            # Reindex to match symbol data
+            source_index = pd.Index(symbol_source.data['index'])
+            if len(symbol_indicator) == len(source_index):
+                reindexed_values = symbol_indicator.values
+            else:
+                symbol_indicator = symbol_indicator.reindex(source_index, method='ffill').fillna(method='bfill')
+                reindexed_values = symbol_indicator.values
+            
+            symbol_source.add(reindexed_values, source_name)
+            
+            # Add to unified tooltip
+            unified_tooltips.append((indicator_name, f'@{{{source_name}}}{{0,0.0[0000]}}'))
+            
+            # Get indicator color
+            colors = value.attrs.get('color', None)
+            if colors:
+                color = colors if isinstance(colors, str) else colors[0]
+            else:
+                default_colors = ['orange', 'cyan', 'yellow', 'magenta', 'brown', 'pink', 'gray']
+                color = default_colors[i % len(default_colors)]
+            
+            # Plot the actual indicator (visible) 
+            if is_scatter:
+                symbol_fig.scatter(
+                    'index', source_name, source=symbol_source,
+                    color=color, line_color='black', fill_alpha=.8,
+                    size=BAR_WIDTH / 2 * 1.5)
+            else:
+                symbol_fig.line(
+                    'index', source_name, source=symbol_source,
+                    color=color, line_width=1.3)
+        
+        # Create a single comprehensive hover tool that shows everything - ONLY ONCE after processing all indicators
+        # Remove any existing HoverTools to ensure we only have our unified one
+        existing_hover_tools = [tool for tool in symbol_fig.tools if isinstance(tool, HoverTool)]
+        for hover_tool in existing_hover_tools:
+            symbol_fig.tools.remove(hover_tool)
+        
+        # Add our unified hover tool - attach to OHLC renderer only to prevent multiple tooltip boxes
+        renderers_list = [ohlc_renderer] if ohlc_renderer else []
+        unified_hover = HoverTool(
+            tooltips=unified_tooltips,
+            mode='vline',  # Shows vertical line with all values
+            formatters={'@datetime': 'datetime'} if 'datetime' in symbol_source.data else {},
+            renderers=renderers_list  # Attach to specific renderer to prevent multiple tooltips
+        )
+        symbol_fig.add_tools(unified_hover)
+        
+        # Hide the default legend since we're using the comprehensive tooltip instead
+        if symbol_fig.legend:
+            symbol_fig.legend.visible = False
+
+    def _plot_separate_symbols():
+        """Create separate combined OHLC+Volume charts for each symbol"""
+        if baseline_multi is None:
+            return []
+        
+        symbols = baseline_multi.columns.get_level_values(0).unique()
+        symbol_figs = []
+        
+        for symbol in symbols:
+            # Extract symbol data
+            symbol_data = baseline_multi.loc[:, (symbol, slice(None))]
+            symbol_data.columns = symbol_data.columns.get_level_values(1)
+            
+            # Reset index to match the main chart
+            original_datetime = symbol_data.index  # Save original datetime index
+            symbol_data = symbol_data.reset_index(drop=True)
+            symbol_data['datetime'] = original_datetime  # Add actual datetime column
+            
+            # Create source for this symbol
+            symbol_source = ColumnDataSource(symbol_data)
+            
+            # Add inc column for coloring
+            symbol_source.add((symbol_data['Close'] >= symbol_data['Open']).astype(int).astype(str), 'inc')
+            
+            # Create combined OHLC+Volume figure
+            combined_fig = new_bokeh_figure(
+                title=f"{symbol} OHLC + Volume",
+                height=500,  # Taller to accommodate both OHLC and volume
+                x_range=fig_ohlc.x_range  # Link x-axis
+            )
+            
+            # Apply datetime formatting to x-axis (same as main chart)
+            if is_datetime_index:
+                combined_fig.xaxis.formatter = CustomJSTickFormatter(
+                    args=dict(axis=combined_fig.xaxis[0],
+                              formatter=DatetimeTickFormatter(days='%a, %d %b',
+                                                            months='%m/%Y'),
+                              source=symbol_source),
+                    code='''
+this.labels = this.labels || formatter.doFormat(ticks
+                                                .map(i => source.data.datetime[i])
+                                                .filter(t => t !== undefined));
+return this.labels[index] || "";
+''')
+            
+            # Plot OHLC bars in the upper portion
+            combined_fig.segment('index', 'High', 'index', 'Low', source=symbol_source, color="black")
+            ohlc_bars = combined_fig.vbar('index', BAR_WIDTH, 'Open', 'Close', source=symbol_source,
+                             line_color="black", fill_color=factor_cmap('inc', COLORS, ['0', '1']))
+            
+            # No static legend needed - all OHLCV and indicator values are shown dynamically in tooltips
+            
+            # Calculate volume range for scaling
+            volume_max = symbol_data['Volume'].max()
+            
+            # Scale volume to appear at bottom (e.g., 20% of price range)
+            price_max = symbol_data[['High', 'Low', 'Open', 'Close']].max().max()
+            price_min = symbol_data[['High', 'Low', 'Open', 'Close']].min().min()
+            price_range = price_max - price_min
+            
+            # Scale volume to bottom 20% of the chart
+            volume_scale_factor = (price_range * 0.2) / volume_max if volume_max > 0 else 1
+            symbol_data['Volume_scaled'] = symbol_data['Volume'] * volume_scale_factor + price_min
+            
+            # Update source with scaled volume
+            symbol_source.add(symbol_data['Volume_scaled'], 'Volume_scaled')
+            
+            # Plot volume bars at the bottom using scaled volume
+            combined_fig.vbar('index', BAR_WIDTH, price_min, 'Volume_scaled', source=symbol_source,
+                             line_color="black", fill_color=factor_cmap('inc', COLORS, ['0', '1']),
+                             alpha=0.6)  # Make volume bars slightly transparent
+            
+            # Tooltips will be handled by the unified tooltip system in _create_unified_legend
+            
+            # Add a horizontal line to separate OHLC from volume
+            separator_y = price_min + (price_range * 0.2)
+            combined_fig.add_layout(Span(location=separator_y, dimension='width',
+                                        line_color='gray', line_dash='dashed', line_width=1))
+            
+            # Add trade markers for this specific symbol
+            if not trades.empty and 'Ticker' in trades.columns:
+                # Filter trades for this symbol
+                symbol_trades = trades[trades['Ticker'] == symbol].copy()
+                
+                if not symbol_trades.empty:
+                    # Create trade source for this symbol
+                    symbol_trade_source = ColumnDataSource(dict(
+                        entry_bar=symbol_trades['EntryBar'],
+                        exit_bar=symbol_trades['ExitBar'],
+                        entry_price=symbol_trades['EntryPrice'],
+                        exit_price=symbol_trades['ExitPrice'],
+                        entry_time=symbol_trades['EntryTime'],
+                        exit_time=symbol_trades['ExitTime'],
+                        size=symbol_trades['Size'],
+                        pnl=symbol_trades['PnL'],
+                        return_pct=symbol_trades['ReturnPct'],
+                        returns_positive=(symbol_trades['ReturnPct'] > 0).astype(int).astype(str),
+                    ))
+                    
+                    # Add position lines (entry to exit)
+                    symbol_trade_source.add(symbol_trades[['EntryBar', 'ExitBar']].to_numpy().tolist(), 'position_lines_xs')
+                    symbol_trade_source.add(symbol_trades[['EntryPrice', 'ExitPrice']].to_numpy().tolist(), 'position_lines_ys')
+                    
+                    # Plot position lines
+                    combined_fig.multi_line(xs='position_lines_xs', ys='position_lines_ys',
+                                           source=symbol_trade_source, 
+                                           line_color=factor_cmap('returns_positive', ['red', 'green'], ['0', '1']),
+                                           line_width=3, line_alpha=0.8, line_dash='solid')
+                    
+                    # Plot entry markers (triangles pointing up) - colored by trade outcome
+                    combined_fig.scatter('entry_bar', 'entry_price', source=symbol_trade_source,
+                                        marker='triangle', size=10, 
+                                        color=factor_cmap('returns_positive', ['red', 'green'], ['0', '1']),
+                                        alpha=0.8,
+                                        legend_label=f'{symbol} Entries')
+                    
+                    # Plot exit markers (triangles pointing down) - colored by trade outcome
+                    combined_fig.scatter('exit_bar', 'exit_price', source=symbol_trade_source,
+                                        marker='inverted_triangle', size=10, 
+                                        color=factor_cmap('returns_positive', ['red', 'green'], ['0', '1']),
+                                        alpha=0.8,
+                                        legend_label=f'{symbol} Exits')
+                    
+                    # Trade information can be accessed via the unified tooltip system
+            
+            # Create unified legend with OHLCV + indicators - do this LAST to override any automatic tooltips
+            _create_unified_legend(combined_fig, symbol, symbol_source, indicators, ohlc_bars)
+            
+            # Legend visibility will be controlled by the main plotting loop
+            
+            symbol_figs.append(combined_fig)
+        
+        return symbol_figs
+
     # Construct figure ...
 
     if plot_equity:
-        _plot_equity_section()
+        _plot_broker_session()
 
     if plot_allocation:
         _plot_equity_stack_section(relative_allocation)
 
     if plot_return:
-        _plot_equity_section(is_return=True)
+        _plot_broker_session(is_return=True)
 
     if plot_drawdown:
         figs_above_ohlc.append(_plot_drawdown_section())
@@ -680,11 +1001,12 @@ return this.labels[index] || "";
 
     if superimpose and is_datetime_index:
         _plot_superimposed_ohlc()
-
-    ohlc_bars = _plot_ohlc()
-    if plot_trades and len(data.columns.levels[0]) <= 10:
+        
+    first_line = _plot_top_ohlc() 
+    if plot_trades and (not tickers_to_plot or len(tickers_to_plot) <= 10):
         _plot_ohlc_trades()
-    if len(data.columns.levels[0]) > 1:
+    
+    if tickers_to_plot and len(tickers_to_plot) > 1:
         _plot_ohlc_universe()
     if plot_indicator:
         indicator_figs = _plot_indicators()
@@ -692,7 +1014,15 @@ return this.labels[index] || "";
             indicator_figs = indicator_figs[::-1]
         figs_below_ohlc.extend(indicator_figs)
 
-    set_tooltips(fig_ohlc, ohlc_tooltips, vline=True, renderers=[ohlc_bars])
+    # Add separate symbol charts
+    symbol_figs = []
+    if baseline_multi is not None:
+        symbol_figs = _plot_separate_symbols()
+        figs_below_ohlc.extend(symbol_figs)
+        
+    set_tooltips(fig_ohlc, ohlc_tooltips, vline=True, renderers=[first_line])
+
+
 
     source.add(ohlc_extreme_values.min(1), 'ohlc_low')
     source.add(ohlc_extreme_values.max(1), 'ohlc_high')
@@ -706,29 +1036,6 @@ return this.labels[index] || "";
                                                   code=_AUTOSCALE_JS_CALLBACK))
 
     plots = figs_above_ohlc + [fig_ohlc] + figs_below_ohlc
-    linked_crosshair = CrosshairTool(dimensions='both')
-
-    for f in plots:
-        if f.legend:
-            f.legend.visible = show_legend
-            f.legend.location = 'top_left'
-            f.legend.border_line_width = 1
-            f.legend.border_line_color = '#333333'
-            f.legend.padding = 5
-            f.legend.spacing = 0
-            f.legend.margin = 0
-            f.legend.label_text_font_size = '8pt'
-            f.legend.click_policy = "hide"
-        f.min_border_left = 0
-        f.min_border_top = 3
-        f.min_border_bottom = 6
-        f.min_border_right = 10
-        f.outline_line_color = '#666666'
-        f.toolbar.logo = None
-
-        f.add_tools(linked_crosshair)
-        wheelzoom_tool = next(wz for wz in f.tools if isinstance(wz, WheelZoomTool))
-        wheelzoom_tool.maintain_focus = False  # type: ignore
 
     kwargs = {}
     if plot_width is None:

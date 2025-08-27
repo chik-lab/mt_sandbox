@@ -246,32 +246,32 @@ class TestBacktest(TestCase):
             # NOTE: These values are also used on the website!
             '# Trades': 66,
             'Avg. Drawdown Duration': pd.Timedelta('41 days 00:00:00'),
-            'Avg. Drawdown [%]': -5.925851581948801,
+            'Avg. Drawdown %': -5.925851581948801,
             'Avg. Trade Duration': pd.Timedelta('46 days 00:00:00'),
-            'Avg. Trade [%]': 2.531715975158555,
-            'Best Trade [%]': 53.59595229490424,
-            'Buy & Hold Return [%]': 703.4582419772772,
+            'Avg. Trade %': 2.531715975158555,
+            'Best Trade %': 53.59595229490424,
+            'Buy & Hold Return %': 703.4582419772772,
             'Calmar Ratio': 0.4414380935608377,
             'Duration': pd.Timedelta('3116 days 00:00:00'),
             'End': pd.Timestamp('2013-03-01 00:00:00'),
             'Equity Final [$]': 51422.98999999996,
             'Equity Peak [$]': 75787.44,
-            'Expectancy [%]': 3.2748078066748834,
-            'Exposure Time [%]': 96.74115456238361,
+            'Expectancy %': 3.2748078066748834,
+            'Exposure Time %': 96.74115456238361,
             'Max. Drawdown Duration': pd.Timedelta('584 days 00:00:00'),
-            'Max. Drawdown [%]': -47.98012705007589,
+            'Max. Drawdown %': -47.98012705007589,
             'Max. Trade Duration': pd.Timedelta('183 days 00:00:00'),
             'Profit Factor': 2.167945974262033,
-            'Return (Ann.) [%]': 21.180255813792282,
-            'Return [%]': 414.2298999999996,
-            'Volatility (Ann.) [%]': 36.49390889140787,
+            'Return (Ann.) %': 21.180255813792282,
+            'Return %': 414.2298999999996,
+            'Volatility (Ann.) %': 36.49390889140787,
             'SQN': 1.0766187356697705,
             'Kelly Criterion': 0.1518705127029717,
             'Sharpe Ratio': 0.5803778344714113,
             'Sortino Ratio': 1.0847880675854096,
             'Start': pd.Timestamp('2004-08-19 00:00:00'),
-            'Win Rate [%]': 46.96969696969697,
-            'Worst Trade [%]': -18.39887353835481,
+            'Win Rate %': 46.96969696969697,
+            'Worst Trade %': -18.39887353835481,
         })
 
         def almost_equal(a, b):
@@ -764,7 +764,7 @@ class TestPlot(TestCase):
                     plot_drawdown=False, plot_equity=False, plot_pl=False, plot_volume=False,
                     open_browser=False)
 
-    def test_indicator_scatter(self):
+    def test_indicator_circle(self):
         class S(Strategy):
             def init(self):
                 self.I(SMA, self.data.Close.df, 5, overlay=True, scatter=True)

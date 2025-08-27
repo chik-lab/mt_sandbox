@@ -2,12 +2,13 @@ import asyncio
 import logging
 import os
 import signal
-import socket
+import urllib3
 import subprocess
 import time
 from collections import namedtuple
 from datetime import datetime
 from typing import Any
+from pathlib import Path
 
 import psutil
 import requests
@@ -40,30 +41,40 @@ GatewayInstance = namedtuple('GatewayInstance', ['pid', 'port'])
 
 app = FastAPI(title='IB gateway admin')
 
+def ib_start():
+    import uvicorn
+    from minitrade.utils.config import config
+    try:
+        uvicorn.run(
+        'minitrade.broker.ibgateway:app',
+        host=config.brokers.ib.gateway_host,
+        port=config.brokers.ib.gateway_port,
+        log_level=config.brokers.ib.gateway_log_level,
+        )
+    except Exception as e:
+        logger.error(f'Failed to start IB gateway: {e}')
+        raise e
 
-def __call_ibgateway(instance: GatewayInstance, method: str, path: str, params: dict | None = None, timeout: int = 10) -> Any:
-    '''Call the ibgateway's REST API
-
-    Args:
-        method: The HTTP method, i.e. GET, POST, PUT, DELETE, etc.
-        path: The REST API endpoint, see https://www.interactivebrokers.com/api/doc.html
-        params: Extra parameters to be sent along with the REST API call
-        timeout: Timeout in second, default 10
-
-    Returns:
-        Json result if API returns 200, None if it returns other 2xx code
-
-    Raises:
-        HTTPException: If API returns 4xx or 5xx status code
-    '''
-    url = f'http://localhost:{instance.port}/v1/api{path}'
-    resp = requests.request(method=method, url=url, params=params, timeout=timeout)
-    if resp.status_code == 200:
-        return resp.json()
-    elif resp.status_code >= 400:
-        raise HTTPException(resp.status_code, detail=resp.text)
-
-
+def call_ibgateway(
+    instance: GatewayInstance,
+    method: str,
+    path: str,
+    params: dict | None = None,
+    timeout: int = 10,
+) -> Any:
+        '''Call the ibgateway's admin API'''
+        url = f'https://localhost:{instance.port}/v1/api{path}'
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        try:
+            resp = requests.request(method=method, url=url, params=params, verify=False,timeout=timeout)
+        except requests.exceptions.ConnectionError:
+           return requests.exceptions.ConnectionError
+        if resp.status_code == 200:
+            return resp.json()
+        elif resp.status_code >= 400:
+            raise RuntimeError(f'Request {path} returned {resp.status_code} {resp.text}')
+        
+        
 def kill_all_ibgateway():
     ''' kill all running gateway instances '''
     for proc in psutil.process_iter():
@@ -89,25 +100,25 @@ def launch_ibgateway() -> GatewayInstance:
     ''' Launch IB gateway to listen on a random port
 
     Returns:
-        instance: Return process id and port number if the gateway is succefully launched
+        instance: Return process id and port number if the gateway is successfully launched
 
     Raises:
         RuntimeError: If launching gateway failed
     '''
-    def get_random_port():
-        sock = socket.socket()
-        sock.bind(('', 0))
-        return sock.getsockname()[1]
+    # def get_random_port():
+    #     sock = socket.socket()
+    #     sock.bind(('', 0))
+    #     return sock.getsockname()[1]
     try:
-        port = get_random_port()
-        cmd = ['/usr/bin/java', '-server', '-Dvertx.disableDnsResolver=true', '-Djava.net.preferIPv4Stack=true',
-               '-Dvertx.logger-delegate-factory-class-name=io.vertx.core.logging.SLF4JLogDelegateFactory',
-               '-Dnologback.statusListenerClass=ch.qos.logback.core.status.OnConsoleStatusListener',
-               '-Dnolog4j.debug=true -Dnolog4j2.debug=true', '-cp',
-               'root:dist/ibgroup.web.core.iblink.router.clientportal.gw.jar:build/lib/runtime/*',
-               'ibgroup.web.core.clientportal.gw.GatewayStart', '--nossl', '--port', str(port)]
-        proc = subprocess.Popen(cmd, cwd=__ib_loc, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        time.sleep(1)
+        #port = get_random_port()
+        port = 5000
+        cmd = [
+                "bash", "bin/run.sh", "root/conf.yaml", "--port", str(port),
+            ]
+        proc = subprocess.Popen(
+            cmd,
+            cwd=str(os.getenv("ib_clientportal_folder")),
+        )
         return GatewayInstance(proc.pid, port)
     except Exception as e:
         raise RuntimeError(f'Launching gateway instance failed: {" ".join(cmd)}') from e
@@ -132,9 +143,9 @@ def ping_ibgateway(username: str, instance: GatewayInstance) -> dict:
         HTTPException: 503 - If getting gateway status failed
     '''
     try:
-        tickle = __call_ibgateway(instance, 'GET', '/tickle', timeout=5)
+        tickle = call_ibgateway(instance, 'GET', 'tickle', timeout=5)
         logger.debug(f'{username} gateway tickle: {tickle}')
-        sso = __call_ibgateway(instance, 'GET', '/sso/validate', timeout=5)
+        sso = call_ibgateway(instance, 'GET', 'sso/validate', timeout=5)
         logger.debug(f'{username} gateway sso: {sso}')
         if sso and tickle:
             return {
@@ -146,6 +157,8 @@ def ping_ibgateway(username: str, instance: GatewayInstance) -> dict:
                 'connected': tickle['iserver']['authStatus']['connected'],
                 'timestamp': datetime.now().isoformat(),
             }
+        # If responses are missing, treat as failure
+        raise HTTPException(503, f'IB ping error: {username}')
     except Exception as e:
         logger.debug(f'{username} gateway invalid, killing it')
         kill_ibgateway(username, instance)
@@ -157,100 +170,38 @@ def ping_ibgateway(username: str, instance: GatewayInstance) -> dict:
 challenge_response = None
 
 
-def login_ibgateway(instance: GatewayInstance, account: BrokerAccount) -> None:
-    ''' Login gateway `instance` to broker `account`
+def login_ibgateway() -> dict:
+        # Launch gateway and wait until auth endpoint responds
+        instance = launch_ibgateway()
+        logging.info(f"Visit https://localhost:{instance.port}/ to log in to IBKR")
 
-    Args:
-        instance: The gateway instance to login
-        account: Account to log in
-    '''
-    global challenge_response
-    challenge_response = None
-    root_url = f'http://localhost:{instance.port}'
-    redirect_url = f'http://localhost:{instance.port}/sso/Dispatcher'
+        deadline = time.time() + 120
+        last_error: Exception | None = None
+        while time.time() < deadline:
+            try:
+                # Touch tickle and sso first to warm up
+                try:
+                    call_ibgateway(instance, 'GET', 'tickle', timeout=3)
+                    call_ibgateway(instance, 'GET', 'sso/validate', timeout=3)
+                except Exception:
+                    pass
+                login_status = call_ibgateway(instance, 'GET', 'iserver/auth/status', timeout=5)
+                if login_status:
+                    return login_status
+            except Exception as e:
+                last_error = e
+            time.sleep(1)
 
-    options = webdriver.ChromeOptions()
-    options.add_argument('ignore-certificate-errors')
-    options.add_argument("--headless")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-gpu")
-
-    try:
-        driver = webdriver.Chrome(options=options)
-        logger.debug(f'{account.username} loading {root_url}')
-        driver.get(root_url)
-        logger.debug(f'{account.username} page loaded {driver.current_url}')
-        driver.find_element(By.NAME, 'username').send_keys(account.username)
-        logger.debug(f'{account.username} filled in username')
-        driver.find_element(By.NAME, 'password').send_keys(account.password)
-        logger.debug(f'{account.username} filled in password')
-        driver.find_element(By.CSS_SELECTOR, ".form-group:nth-child(1) > .btn").click()
-        logger.debug(f'{account.username} submitted login form')
-        time.sleep(3)
-
-        try:
-            manual_2fa = driver.find_element(
-                By.CSS_SELECTOR, '.text-center > .xyz-showchallenge > small').is_displayed()
-        except Exception:
-            manual_2fa = False
-        logger.debug(f'{account.username} manual 2fa = {manual_2fa}')
-
-        if manual_2fa:
-            driver.find_element(By.CSS_SELECTOR, ".text-center > .xyz-showchallenge > small").click()
-            logger.debug(f'{account.username} switched to logging in by challenge code')
-            challenge_code = driver.find_element(By.CSS_SELECTOR, '.xyz-goldchallenge').text
-            logger.debug(f'{account.username} found challenge code: {challenge_code}')
-            send_telegram_message(html=f'Log in to <b>"{account.username}"</b>, challenge:\n'
-                                  f'<pre>{challenge_code}</pre>\n')
-            send_telegram_message('Please respond in 3 minutes.')
-            logger.debug(f'{account.username} sent challenge code to telegram')
-            for _ in range(180):
-                if challenge_response:
-                    logger.debug(f'{account.username} got challenge response: {challenge_response}')
-                    driver.find_element(By.NAME, "gold-response").send_keys(challenge_response)
-                    logger.debug(f'{account.username} filled in challenge response')
-                    driver.find_element(By.CSS_SELECTOR, ".xyzform-gold .btn").click()
-                    logger.debug(f'{account.username} submitted challenge response')
-                    WebDriverWait(driver, timeout=60).until(lambda d: d.current_url.startswith(redirect_url))
-                    logger.debug(f'{account.username} login succeeded')
-                    break
-                else:
-                    if _ % 10 == 0:
-                        logger.debug(f'{account.username} waiting for challenge response ({_}s)')
-                    time.sleep(1)
-            else:
-                logger.debug(f'{account.username} challenge response timeout')
-                send_telegram_message('Login timeout')
-                raise RuntimeError(f'Challenge response timeout for {account.username}')
-        else:
-            logger.debug(f'{account.username} login initiated')
-            send_telegram_message(html=f'Log in to <b>"{account.username}"</b>...')
-            WebDriverWait(driver, timeout=60).until(lambda d: d.current_url.startswith(redirect_url))
-            logger.debug(f'{account.username} login succeeded')
-
-        for i in range(20):
-            status = ping_ibgateway(account.username, instance)
-            if status['authenticated'] and status['connected']:
-                app.registry[account.username] = instance
-                send_telegram_message('Login succeeded')
-                return status
-            else:
-                logger.debug(f'{account.username} waiting for auth status to be ready ({i}s)')
-                time.sleep(1)
-        else:
-            send_telegram_message('Login timeout')
-            raise RuntimeError(f'Gateway auth timeout for {account.username}')
-    finally:
-        if driver:
-            driver.close()
-            driver.quit()
+        if last_error is not None:
+            raise requests.exceptions.ConnectionError(f'Failed to connect to IB gateway: {last_error}')
+        raise requests.exceptions.ConnectionError('Failed to connect to IB gateway')
 
 
 async def ibgateway_keepalive() -> None:
     ''' Keep gateway connections live, ping broker every 1 minute '''
     loop = asyncio.get_event_loop()
     while True:
-        for username, instance in app.registry.copy().items():
+        for username, instance in app.state.registry.copy().items():
             try:
                 status = await loop.run_in_executor(None, lambda: ping_ibgateway(username, instance))
                 logger.debug(f'{username} keepalive: {status}')
@@ -265,21 +216,21 @@ def kill_ibgateway(username: str, instance: GatewayInstance) -> None:
     Args:
         instance: The gateway instance to kill
     '''
-    app.registry.pop(username, None)
+    app.state.registry.pop(username, None)
     psutil.Process(instance.pid).terminate()
     logger.debug(f'{username} gateway killed')
-    logger.debug(f'Gateway registry: {app.registry}')
+    logger.debug(f'Gateway registry: {app.state.registry}')
 
 
 @app.on_event('startup')
 async def start_gateway():
-    app.registry = {}
+    app.state.registry = {}
     asyncio.create_task(ibgateway_keepalive())
 
 
 @app.on_event('shutdown')
 async def shutdown_gateway():
-    for username, instance in app.registry.copy().items():
+    for username, instance in app.state.registry.copy().items():
         kill_ibgateway(username, instance)
 
 
@@ -295,7 +246,7 @@ def get_account(alias: str) -> BrokerAccount:
 def get_gateway_status():
     ''' Return the gateway status '''
     status = []
-    for username, inst in app.registry.copy().items():
+    for username, inst in app.state.registry.copy().items():
         try:
             status.append(ping_ibgateway(username, inst))
         except Exception:
@@ -321,43 +272,12 @@ def get_account_status(account=Depends(get_account)):
             timestamp: Timestamp of status check
         or 204 if no gateway running.
     '''
-    instance = app.registry.get(account.username, None)
+    instance = app.state.registry.get(account.username, None)
     if instance:
         return ping_ibgateway(account.username, instance)
     else:
         return Response(status_code=204)
 
-
-@app.put('/ibgateway/{alias}')
-def login_gateway_with_account(account=Depends(get_account)):
-    ''' Launch a gateway instance and login with account `alias`
-
-    Args:
-        alias: Broker account alias
-
-    Returns:
-        204 if login succeeds, otherwise 503.
-    '''
-    logger.debug(f'{account.username} login started')
-    instance = app.registry.get(account.username, None)
-    if instance:
-        logger.debug(f'{account.username} found existing gateway: {instance}')
-        try:
-            return ping_ibgateway(account.username, instance)
-        except Exception:
-            logger.debug(f'{account.username} existing gateway invalid, killing it')
-            pass
-    try:
-        # try launching the gateway and login
-        instance = launch_ibgateway()
-        logger.debug(f'{account.username} started new gateway: {instance}')
-        time.sleep(3)   # allow gateway instance to fully launch
-        return login_ibgateway(instance, account)
-    except Exception as e:
-        logger.exception(f'{account.username} gateway error: {e}')
-        if instance:
-            kill_ibgateway(account.username, instance)
-        raise HTTPException(503, 'Launching gateway failed')
 
 
 @app.delete('/ibgateway/{alias}')
@@ -370,7 +290,7 @@ def exit_gateway(account=Depends(get_account)):
     Returns:
         204
     '''
-    instance = app.registry.get(account.username, None)
+    instance = app.state.registry.get(account.username, None)
     if instance:
         kill_ibgateway(account.username, instance)
     return Response(status_code=204)

@@ -584,7 +584,7 @@ class Strategy(ABC):
     def I(self,  # noqa: E743
           funcval: Union[pd.DataFrame, pd.Series, Callable], *args,
           name=None, plot=True, overlay=None, color=None, scatter=False,
-          ** kwargs) -> Union[pd.DataFrame, pd.Series]:
+          ** kwargs) -> np.ndarray:
         """
         Declare an indicator. An indicator is just an array of values,
         but one that is revealed gradually in
@@ -629,22 +629,11 @@ class Strategy(ABC):
             else:
                 name = name.format(*map(_as_str, args),
                                    **dict(zip(kwargs.keys(), map(_as_str, kwargs.values()))))
-            try:
-                value = funcval(*args, **kwargs)
-            except Exception as e:
-                raise RuntimeError(f'Indicator "{funcval}" error') from e
+            value = funcval(*args, **kwargs)
         else:
             value = funcval
 
-        if isinstance(value, (pd.DataFrame, pd.Series)):
-            if not value.index.equals(self._data.index):
-                raise ValueError(
-                    'Indicators of pd.DataFrame or pd.Series must have the same index as'
-                    f' `data` (data shape: {len(self._data)}; indicator shape: {len(value)}.\n'
-                    f'`data` index: {self._data.index}\n'
-                    f'Indicator index: {value.index}\n')
-            value = value.copy()
-        else:
+        if not isinstance(value, (pd.DataFrame, pd.Series)):
             if value is not None:
                 value = try_(lambda: np.asarray(value, order='C'), None)
             is_arraylike = bool(value is not None and value.shape)
@@ -1187,6 +1176,9 @@ class Trade:
         self.__sl_order: Optional[Order] = None
         self.__tp_order: Optional[Order] = None
         self.__tag = tag
+        # Commission accounting (separated from price when enabled)
+        self.__entry_commission: float = 0.0
+        self.__exit_commission: float = 0.0
 
     def __repr__(self):
         return f'<Trade size={self.__size} time={self.__entry_bar}-{self.__exit_bar or ""} ' \
@@ -1309,6 +1301,19 @@ class Trade:
         price = self.__exit_price or self.__broker.last_price(self.__ticker)
         return self.__size * price
 
+    # Commission fields
+    @property
+    def entry_commission(self) -> float:
+        return self.__entry_commission
+
+    @property
+    def exit_commission(self) -> float:
+        return self.__exit_commission
+
+    @property
+    def commission_total(self) -> float:
+        return (self.__entry_commission or 0.0) + (self.__exit_commission or 0.0)
+
     # SL/TP management API
 
     @property
@@ -1356,7 +1361,7 @@ class Trade:
 
 class _Broker:
     def __init__(self, *, data: _Data, cash, holding, commission, margin, trade_on_close, hedging, exclusive_orders,
-                 trade_start_date, lot_size, fail_fast, storage):
+                 trade_start_date, lot_size, fail_fast, storage, separate_commission: bool = False):
         assert 0 < cash, f"cash should be >0, is {cash}"
         assert -.1 <= commission < .1, \
             ("commission should be between -10% "
@@ -1374,6 +1379,7 @@ class _Broker:
         self._lot_size = lot_size
         self._fail_fast = fail_fast
         self._storage = storage
+        self._separate_commission = bool(separate_commission)
 
         self._equity = np.tile(np.nan, (len(data.index), len(data.tickers)+2))
         self.orders: List[Order] = []
@@ -1505,7 +1511,11 @@ class _Broker:
         Long/short `price`, adjusted for commisions.
         In long positions, the adjusted price is a fraction higher, and vice versa.
         """
-        return (price or self.last_price(ticker)) * (1 + copysign(self._commission, size))
+        # If separating commission from price, do not embed commission into the fill price
+        base_price = (price or self.last_price(ticker))
+        if self._separate_commission:
+            return base_price
+        return base_price * (1 + copysign(self._commission, size))
 
     def equity(self, ticker: str = None) -> float:
         if ticker:
@@ -1621,6 +1631,17 @@ class _Broker:
             # Determine entry/exit bar index
             is_market_order = not order.limit and not stop_price
             time_index = (i - 1) if is_market_order and self._trade_on_close else i
+
+            # If this is a new standalone entry with a preset SL, and the next entry base price
+            # already violates the SL (gap beyond SL), cancel the entry instead of opening.
+            if not order.parent_trade and order.sl:
+                entry_base_price = prev_close if self._trade_on_close else open_
+                if (order.is_long and entry_base_price <= order.sl) or (
+                    order.is_short and entry_base_price >= order.sl
+                ):
+                    # Skip this order; do not enter when SL would be instantly breached
+                    self.orders.remove(order)
+                    continue
 
             # If order is a SL/TP order, it should close an existing trade it was contingent upon
             if order.parent_trade:
@@ -1754,13 +1775,29 @@ class _Broker:
         if trade._tp_order:
             self.orders.remove(trade._tp_order)
 
-        self.closed_trades.append(trade._replace(exit_price=price, exit_bar=time_index))
-        self._cash += trade.pl
+        # Compute and record exit commission if separating commission
+        exit_commission = 0.0
+        if self._separate_commission and self._commission:
+            exit_commission = abs(trade.size) * price * abs(self._commission)
+
+        # Record commissions on the trade and move to closed_trades
+        closed = trade._replace(exit_price=price, exit_bar=time_index,
+                                exit_commission=(trade.exit_commission or 0.0) + exit_commission)
+        self.closed_trades.append(closed)
+
+        # Update cash by gross PnL minus exit commission
+        self._cash += trade.pl - exit_commission
 
     def _open_trade(self, ticker: str, price: float, size: int,
                     sl: Optional[float], tp: Optional[float], time_index: int, tag):
         trade = Trade(self, ticker, size, price, time_index, tag)
         self.trades[ticker].append(trade)
+        # Compute and record entry commission if separating commission
+        if self._separate_commission and self._commission:
+            entry_commission = abs(size) * price * abs(self._commission)
+            # reduce cash immediately by entry commission
+            self._cash -= entry_commission
+            trade._replace(entry_commission=(trade.entry_commission or 0.0) + entry_commission)
         # Create SL/TP (bracket) orders.
         # Make sure SL order is created first so it gets adversarially processed before TP order
         # in case of an ambiguous tie (both hit within a single bar).
@@ -1797,6 +1834,7 @@ class Backtest:
                  lot_size=1,
                  fail_fast=True,
                  storage: dict | None = None,
+                 separate_commission: bool = False,
                  ):
         """
         Initialize a backtest. Requires data and a strategy to test.
@@ -1922,18 +1960,19 @@ class Backtest:
             exclusive_orders=exclusive_orders,
             trade_start_date=datetime.strptime(trade_start_date, '%Y-%m-%d') if trade_start_date else None,
             lot_size=lot_size, fail_fast=fail_fast, storage=storage,
+            separate_commission=separate_commission,
         )
         self._strategy = strategy
         self._results: Optional[pd.Series] = None
 
         # equal weighed average, as if buy and hold an equal weighed portfolio
-        weights = 1 / self._data.xs('Close', axis=1, level=1).iloc[0]
-        weighted_data = self._data.copy()
-        weighted_data = weighted_data.loc[:, (slice(None), ohlc)]
-        for ticker in weights.index:
-            weighted_data[ticker] = weighted_data[ticker] * weights[ticker]
-        weighted_data = weighted_data.T.groupby(level=1).agg('sum').T / weights.sum()
-        self._ohlc_ref_data = weighted_data
+        # weights = 1 / self._data.xs('Close', axis=1, level=1).iloc[0]
+        # weighted_data = self._data.copy()
+        # weighted_data = weighted_data.loc[:, (slice(None), ohlc)]
+        # for ticker in weights.index:
+        #     weighted_data.loc[:, ticker] = weighted_data.loc[:, ticker] * weights[ticker]
+        # weighted_data = weighted_data.T.groupby(level=1).agg('sum').T / weights.sum()
+        self._ohlc_ref_data = self._data
 
     def run(self, **kwargs) -> pd.Series:
         """
@@ -1945,29 +1984,29 @@ class Backtest:
             Start                     2004-08-19 00:00:00
             End                       2013-03-01 00:00:00
             Duration                   3116 days 00:00:00
-            Exposure Time [%]                     93.9944
+            Exposure Time %                     93.9944
             Equity Final [$]                      51959.9
             Equity Peak [$]                       75787.4
-            Return [%]                            419.599
-            Buy & Hold Return [%]                 703.458
-            Return (Ann.) [%]                      21.328
-            Volatility (Ann.) [%]                 36.5383
+            Return %                            419.599
+            Buy & Hold Return %                 703.458
+            Return (Ann.) %                      21.328
+            Volatility (Ann.) %                 36.5383
             Sharpe Ratio                         0.583718
             Sortino Ratio                         1.09239
             Calmar Ratio                         0.444518
-            Max. Drawdown [%]                    -47.9801
-            Avg. Drawdown [%]                    -5.92585
+            Max. Drawdown %                    -47.9801
+            Avg. Drawdown %                    -5.92585
             Max. Drawdown Duration      584 days 00:00:00
             Avg. Drawdown Duration       41 days 00:00:00
             # Trades                                   65
-            Win Rate [%]                          46.1538
-            Best Trade [%]                         53.596
-            Worst Trade [%]                      -18.3989
-            Avg. Trade [%]                        2.35371
+            Win Rate %                          46.1538
+            Best Trade %                         53.596
+            Worst Trade %                      -18.3989
+            Avg. Trade %                        2.35371
             Max. Trade Duration         183 days 00:00:00
             Avg. Trade Duration          46 days 00:00:00
             Profit Factor                         2.08802
-            Expectancy [%]                        8.79171
+            Expectancy %                        8.79171
             SQN                                  0.916893
             Kelly Criterion                        0.6134
             _strategy                            SmaCross
@@ -2003,7 +2042,7 @@ class Backtest:
                            if any([indicator is item for item in strategy._indicators])}
 
         # Skip first few candles where indicators are still "warming up"
-        start = max((indicator.isna().any(axis=1).argmin() if isinstance(indicator, pd.DataFrame)
+        start = min((indicator.isna().any(axis=1).argmin() if isinstance(indicator, pd.DataFrame)
                      else indicator.isna().argmin() for indicator in indicator_attrs.values()), default=0)
         start = max(start, strategy._start_on_day)
 
@@ -2489,7 +2528,6 @@ class Backtest:
             plot_drawdown=plot_drawdown,
             plot_trades=plot_trades,
             smooth_equity=smooth_equity,
-            relative_equity=relative_equity,
             superimpose=superimpose,
             resample=resample,
             reverse_indicators=reverse_indicators,

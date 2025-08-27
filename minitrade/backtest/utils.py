@@ -68,7 +68,7 @@ def generate_random_portfolios(universe: list[str], k: int, limit: int = None) -
 
 
 def backtest_strategy_parameters(data: pd.DataFrame, strategy: Strategy,
-                                 goals: list[str] = ['Return [%]', 'Max. Drawdown [%]', 'Calmar Ratio', 'SQN'],
+                                 goals: list[str] = ['Return %', 'Max. Drawdown %', 'Calmar Ratio', 'SQN'],
                                  **kwargs: dict[str, Any]):
     '''Plot the strategy performance vs. a range of strategy parameters for visual inspection.
 
@@ -97,7 +97,7 @@ def backtest_strategy_parameters(data: pd.DataFrame, strategy: Strategy,
 
 
 def backtest_strategy_on_portfolios(
-        data_lst: list[pd.DataFrame], strategy: Strategy, goal: str = 'Return [%]', **kwargs: dict[str, Any]) -> tuple[pd.DataFrame, pd.DataFrame]:
+        data_lst: list[pd.DataFrame], strategy: Strategy, goal: str = 'Return %', **kwargs: dict[str, Any]) -> tuple[pd.DataFrame, pd.DataFrame]:
     '''Run strategy over a list of portfolios and collect their best performance after optimized strategy parameters.
 
     Args:
@@ -197,7 +197,7 @@ def calculate_trade_stats(data: pd.DataFrame, cash: int, orders: list[dict], hol
                              'exit_time': order['entry_time'],
                              'exit_price': order['entry_price'],
                              'pnl': (order['entry_price'] - open_order['entry_price']) * closed_size,
-                             'return_pct[%]': ((order['entry_price'] / open_order['entry_price'] - 1) *
+                             'return_pct%': ((order['entry_price'] / open_order['entry_price'] - 1) *
                                                copysign(1, closed_size) * 100) if open_order['entry_price'] else None}
                     closed_trades.append(trade)
                     # reduce the size of the original order
@@ -244,7 +244,7 @@ def calculate_trade_stats(data: pd.DataFrame, cash: int, orders: list[dict], hol
     for open_order in open_orders:
         trade = {'ticker': open_order['ticker'], 'size': open_order['size'], 'entry_bar': open_order['entry_bar'],
                  'entry_time': open_order['entry_time'], 'entry_price': open_order['entry_price'],
-                 'exit_bar': None, 'exit_time': None, 'exit_price': None, 'pnl': None, 'return_pct[%]': None}
+                 'exit_bar': None, 'exit_time': None, 'exit_price': None, 'pnl': None, 'return_pct%': None}
         trades.append(trade)
         # alternatively assuming all trades are closed on the last day using its close price
         exit_price = close_prices[open_order['ticker']].iloc[-1]
@@ -256,7 +256,7 @@ def calculate_trade_stats(data: pd.DataFrame, cash: int, orders: list[dict], hol
             'entry_price': open_order['entry_price'],
             'exit_bar': len(data) - 1, 'exit_time': data.index[-1],
             'exit_price': exit_price, 'pnl': (exit_price - open_order['entry_price']) * open_order['size'],
-            'return_pct[%]': ((exit_price / open_order['entry_price'] - 1) * copysign(1, open_order['size']) * 100)
+            'return_pct%': ((exit_price / open_order['entry_price'] - 1) * copysign(1, open_order['size']) * 100)
             if open_order['entry_price'] else None, }
         alt_trades.append(alt_trade)
 
@@ -266,7 +266,7 @@ def calculate_trade_stats(data: pd.DataFrame, cash: int, orders: list[dict], hol
         alt_trade_df = pd.DataFrame(alt_trades)
     else:
         trade_df = pd.DataFrame(columns=['ticker', 'size', 'entry_bar', 'entry_time',
-                                         'entry_price', 'exit_bar', 'exit_time', 'exit_price', 'pnl', 'return_pct[%]'])
+                                         'entry_price', 'exit_bar', 'exit_time', 'exit_price', 'pnl', 'return_pct%'])
         alt_trade_df = trade_df.copy()
 
     # calculate equity value over time
