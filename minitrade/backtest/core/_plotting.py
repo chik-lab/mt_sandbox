@@ -1086,7 +1086,9 @@ return this.labels[index] || "";
                 source.add(arr, source_name)
                 tooltips.append(f"@{{{source_name}}}{{0,0.0[0000]}}")
                 if is_overlay:
-                    ohlc_extreme_values[source_name] = arr
+                    # Align overlay series to baseline integer index so autoscale picks it up
+                    arr_aligned = pd.Series(arr).reset_index(drop=True)
+                    ohlc_extreme_values[source_name] = arr_aligned
                     if is_scatter:
                         fig.scatter(
                             "index",
@@ -1367,6 +1369,9 @@ return this.labels[index] || "";
 
             # Create source for this symbol
             symbol_source = ColumnDataSource(symbol_data)
+            # Ensure a numeric 'index' column exists and matches panel length
+            if "index" not in symbol_source.data or len(symbol_source.data["index"]) != len(symbol_data):
+                symbol_source.add(list(range(len(symbol_data))), "index")
 
             # Add inc column for coloring
             symbol_source.add(
@@ -1378,7 +1383,7 @@ return this.labels[index] || "";
             combined_fig = new_bokeh_figure(
                 title=f"{symbol} OHLC + Volume",
                 height=500,  # Taller to accommodate both OHLC and volume
-                x_range=fig_ohlc.x_range,  # Link x-axis
+                x_range=Range1d(0, max(1, len(symbol_data) - 1)),  # Independent x-range
             )
 
             # Apply datetime formatting to x-axis (same as main chart)
@@ -1542,6 +1547,28 @@ return this.labels[index] || "";
                 combined_fig, symbol, symbol_source, indicators, ohlc_bars
             )
 
+            # Per-symbol autoscale on zoom/pan: compute lows/highs and wire callback to shared x_range
+            try:
+                # Ensure ohlc_low/high exist on the per-symbol source
+                symbol_source.add(
+                    symbol_data[["High", "Low"]].min(1).reset_index(drop=True),
+                    "ohlc_low",
+                )
+                symbol_source.add(
+                    symbol_data[["High", "Low"]].max(1).reset_index(drop=True),
+                    "ohlc_high",
+                )
+
+                # Attach JS callback to this panel's own x_range
+                _sym_cb = CustomJS(
+                    args=dict(ohlc_range=combined_fig.y_range, source=symbol_source),
+                    code=_AUTOSCALE_JS_CALLBACK,
+                )
+                combined_fig.x_range.js_on_change("start", _sym_cb)
+                combined_fig.x_range.js_on_change("end", _sym_cb)
+            except Exception:
+                pass
+
             # Legend visibility will be controlled by the main plotting loop
 
             symbol_figs.append(combined_fig)
@@ -1599,10 +1626,16 @@ return this.labels[index] || "";
     if plot_volume:
         custom_js_args.update(volume_range=fig_volume.y_range)
 
-    fig_ohlc.x_range.js_on_change(
-        "end",
-        CustomJS(args=custom_js_args, code=_AUTOSCALE_JS_CALLBACK),  # type: ignore
-    )
+    const_cb = CustomJS(args=custom_js_args, code=_AUTOSCALE_JS_CALLBACK)  # type: ignore
+    fig_ohlc.x_range.js_on_change("start", const_cb)
+    fig_ohlc.x_range.js_on_change("end", const_cb)
+
+    # Kick once so initial y-range reflects current view
+    try:
+        fig_ohlc.x_range.start += 1e-9
+        fig_ohlc.x_range.start -= 1e-9
+    except Exception:
+        pass
 
     plots = figs_above_ohlc + [fig_ohlc] + figs_below_ohlc
 
