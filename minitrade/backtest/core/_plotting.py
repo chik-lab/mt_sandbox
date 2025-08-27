@@ -5,7 +5,7 @@ import warnings
 from colorsys import hls_to_rgb, rgb_to_hls
 from functools import partial
 from itertools import combinations, cycle
-from typing import Callable, Dict, List, Union
+from typing import Callable, List, Union
 
 import numpy as np
 import pandas as pd
@@ -14,7 +14,6 @@ from bokeh.colors.named import lime as BULL_COLOR
 from bokeh.colors.named import tomato as BEAR_COLOR
 from bokeh.models import (
     ColumnDataSource,
-    CrosshairTool,
     CustomJS,
     DatetimeTickFormatter,
     HoverTool,
@@ -23,9 +22,10 @@ from bokeh.models import (
     NumeralTickFormatter,
     Range1d,
     Span,
-    WheelZoomTool,
 )
 from bokeh.plotting import figure as _figure
+
+from .lib import OHLCV_AGG
 
 try:
     from bokeh.models import CustomJSTickFormatter
@@ -38,7 +38,7 @@ from bokeh.layouts import gridplot
 from bokeh.palettes import Category10
 from bokeh.transform import factor_cmap
 
-from ._util import _as_list, _data_period, _Indicator
+from ._util import _as_list, _data_period
 
 with open(
     os.path.join(os.path.dirname(__file__), "autoscale_cb.js"), encoding="utf-8"
@@ -181,6 +181,114 @@ def _maybe_resample_data(
     return data, baseline, indicators, equity_data, trades
 
 
+def _extract_traded_tickers(trades):
+    """Extract tickers that have trade records."""
+    traded_tickers = set()
+    try:
+        if isinstance(trades, pd.DataFrame) and "Ticker" in trades.columns:
+            traded_tickers = set(trades["Ticker"].dropna().unique().tolist())
+    except Exception:
+        pass
+    return traded_tickers
+
+
+def _filter_data_to_traded_tickers(data, traded_tickers):
+    """Filter universe data to traded tickers if available."""
+    try:
+        if traded_tickers and isinstance(data.columns, pd.MultiIndex):
+            tickers_in_data = [t for t in data.columns.levels[0] if t in traded_tickers]
+            if tickers_in_data:
+                return data.loc[:, (tickers_in_data, slice(None))]
+    except Exception:
+        pass
+    return data
+
+
+def _determine_tickers_to_plot(data, traded_tickers):
+    """Determine tickers to plot for universe and for gating decisions."""
+    try:
+        if isinstance(data.columns, pd.MultiIndex):
+            available_tickers = list(data.columns.levels[0])
+            return [
+                t
+                for t in available_tickers
+                if (not traded_tickers or t in traded_tickers)
+            ]
+    except Exception:
+        return []
+
+
+def _process_baseline_data(baseline):
+    """Process baseline data to handle multi-symbol cases."""
+    if isinstance(baseline.columns, pd.MultiIndex):
+        # Store the full multi-symbol data for later use
+        baseline_multi = baseline
+
+        # Create a simple baseline for the main chart (using first symbol but simplified)
+        first_symbol = baseline.columns.get_level_values(0)[0]
+        baseline_main = baseline.loc[:, (first_symbol, slice(None))]
+        baseline_main.columns = baseline_main.columns.get_level_values(
+            1
+        )  # Remove symbol level
+
+        # Ensure we have the required OHLCV columns
+        if "Volume" not in baseline_main:
+            baseline_main["Volume"] = 0
+        baseline_main = baseline_main[list(OHLCV_AGG.keys())].copy(deep=False)
+        return baseline_main, baseline_multi
+    else:
+        # Original single-symbol logic
+        if "Volume" not in baseline:
+            baseline["Volume"] = 0
+        baseline = baseline[list(OHLCV_AGG.keys())].copy(deep=False)
+        return baseline, None
+
+
+def _prepare_plot_data(results, data, baseline, indicators, resample):
+    """Prepare and process all data for plotting."""
+    equity_data = results["_equity_curve"].copy()
+    trades = results["_trades"]
+
+    # Extract traded tickers
+    traded_tickers = _extract_traded_tickers(trades)
+
+    # Filter data to traded tickers
+    data = _filter_data_to_traded_tickers(data, traded_tickers)
+
+    # Determine tickers to plot
+    tickers_to_plot = _determine_tickers_to_plot(data, traded_tickers)
+
+    # Process baseline data
+    baseline, baseline_multi = _process_baseline_data(baseline)
+
+    # Handle resampling if needed
+    is_datetime_index = isinstance(baseline.index, pd.DatetimeIndex)
+    if is_datetime_index:
+        data, baseline, indicators, equity_data, trades = _maybe_resample_data(
+            resample, data, baseline, indicators, equity_data, trades
+        )
+
+    # Prepare index data
+    baseline.index.name = None  # Provides source name @index
+    baseline["datetime"] = baseline.index  # Save original, maybe datetime index
+    baseline = baseline.reset_index(drop=True)
+    equity_data = equity_data.reset_index(drop=True)
+    index = baseline.index
+
+    return {
+        "data": data,
+        "baseline": baseline,
+        "baseline_multi": baseline_multi,
+        "indicators": indicators,
+        "equity_data": equity_data,
+        "trades": trades,
+        "traded_tickers": traded_tickers,
+        "tickers_to_plot": tickers_to_plot,
+        "index": index,
+        "is_datetime_index": is_datetime_index,
+    }
+
+
 def plot(
     *,
     results: pd.Series,
@@ -219,78 +327,19 @@ def plot(
     BAR_WIDTH = 0.8
 
     assert baseline.index.equals(results["_equity_curve"].index)
-    equity_data = results["_equity_curve"].copy()
-    trades = results["_trades"]
 
-    # Only show stocks/indicators that have trade records
-    traded_tickers: set = set()
-    try:
-        if isinstance(trades, pd.DataFrame) and "Ticker" in trades.columns:
-            traded_tickers = set(trades["Ticker"].dropna().unique().tolist())
-    except Exception:
-        traded_tickers = set()
-
-    # Filter universe data to traded tickers if available
-    try:
-        if traded_tickers and isinstance(data.columns, pd.MultiIndex):
-            tickers_in_data = [t for t in data.columns.levels[0] if t in traded_tickers]
-            if tickers_in_data:
-                data = data.loc[:, (tickers_in_data, slice(None))]
-    except Exception:
-        pass
-
-    # Determine tickers to plot for universe and for gating decisions
-    tickers_to_plot = []
-    try:
-        if isinstance(data.columns, pd.MultiIndex):
-            available_tickers = list(data.columns.levels[0])
-            tickers_to_plot = [
-                t
-                for t in available_tickers
-                if (not traded_tickers or t in traded_tickers)
-            ]
-    except Exception:
-        tickers_to_plot = []
-
-    is_datetime_index = isinstance(baseline.index, pd.DatetimeIndex)
-
-    from .lib import OHLCV_AGG
-
-    # Handle multi-symbol baseline data
-    if isinstance(baseline.columns, pd.MultiIndex):
-        # Store the full multi-symbol data for later use
-        baseline_multi = baseline
-
-        # Create a simple baseline for the main chart (using first symbol but simplified)
-        first_symbol = baseline.columns.get_level_values(0)[0]
-        baseline_main = baseline.loc[:, (first_symbol, slice(None))]
-        baseline_main.columns = baseline_main.columns.get_level_values(
-            1
-        )  # Remove symbol level
-
-        # Ensure we have the required OHLCV columns
-        if "Volume" not in baseline_main:
-            baseline_main["Volume"] = 0
-        baseline_main = baseline_main[list(OHLCV_AGG.keys())].copy(deep=False)
-        baseline = baseline_main
-    else:
-        # Original single-symbol logic
-        if "Volume" not in baseline:
-            baseline["Volume"] = 0
-        baseline = baseline[list(OHLCV_AGG.keys())].copy(deep=False)
-        baseline_multi = None
-
-    # Limit data to max_candles
-    if is_datetime_index:
-        data, baseline, indicators, equity_data, trades = _maybe_resample_data(
-            resample, data, baseline, indicators, equity_data, trades
-        )
-
-    baseline.index.name = None  # Provides source name @index
-    baseline["datetime"] = baseline.index  # Save original, maybe datetime index
-    baseline = baseline.reset_index(drop=True)
-    equity_data = equity_data.reset_index(drop=True)
-    index = baseline.index
+    # Prepare all plot data
+    plot_data = _prepare_plot_data(results, data, baseline, indicators, resample)
+    data = plot_data["data"]
+    baseline = plot_data["baseline"]
+    baseline_multi = plot_data["baseline_multi"]
+    indicators = plot_data["indicators"]
+    equity_data = plot_data["equity_data"]
+    trades = plot_data["trades"]
+    traded_tickers = plot_data["traded_tickers"]
+    tickers_to_plot = plot_data["tickers_to_plot"]
+    index = plot_data["index"]
+    is_datetime_index = plot_data["is_datetime_index"]
 
     new_bokeh_figure = partial(
         _figure,
@@ -303,7 +352,7 @@ def plot(
         active_scroll="xwheel_zoom",
     )
 
-    pad = (index[-1] - index[0]) / 20
+    # pad = (index[-1] - index[0]) / 20  # unused
 
     if index.size > 1:
         fig_ohlc = new_bokeh_figure(x_range=Range1d(int(index[0]), int(index[-1])))
@@ -454,7 +503,7 @@ return this.labels[index] || "";
             color="blue",
             legend_label="Total Value",
         )
-        r2 = fig.line(
+        fig.line(
             "index",
             "cash",
             source=source,

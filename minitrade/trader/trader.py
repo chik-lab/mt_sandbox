@@ -534,7 +534,14 @@ class BacktestRunner:
         ohlc = ["Open", "High", "Low", "Close"]
         if self.plan.strict:
             logs = self.plan.list_logs()
-            log = next((l for l in logs if l.data is not None and not l.error), None)
+            log = next(
+                (
+                    log_entry
+                    for log_entry in logs
+                    if log_entry.data is not None and not log_entry.error
+                ),
+                None,
+            )
             if log:
                 # exclude the last data point which may change intraday
                 # only check for price change as volume data from Yahoo do change sometimes
@@ -864,7 +871,7 @@ class BacktestRunner:
                 )
                 message.append(f"<b>Orders</b>\n<pre>{html.escape(plan_orders)}</pre>")
             else:
-                message.append(f"<b>Orders</b>\n<pre>No order generated</pre>")
+                message.append("<b>Orders</b>\n<pre>No order generated</pre>")
 
             if plan_positions:
                 message.append(

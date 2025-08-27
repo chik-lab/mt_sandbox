@@ -37,6 +37,171 @@ def geometric_mean(returns: pd.Series) -> float:
     return np.exp(np.log(returns).sum() / (len(returns) or np.nan)) - 1
 
 
+def _prepare_orders_dataframe(orders):
+    """Convert orders to DataFrame format if needed."""
+    if isinstance(orders, pd.DataFrame):
+        return orders
+
+    return pd.DataFrame(
+        {
+            "SignalTime": [t.entry_time for t in orders],
+            "Ticker": [t.ticker for t in orders],
+            "Side": ["Buy" if t.size > 0 else "Sell" for t in orders],
+            "Size": [int(t.size) for t in orders],
+        }
+    ).set_index("SignalTime")
+
+
+def _prepare_trades_dataframe(trades):
+    """Convert trades to DataFrame format if needed."""
+    if isinstance(trades, pd.DataFrame):
+        return trades
+
+    # Came straight from Backtest.run()
+    trades_df = pd.DataFrame(
+        {
+            "EntryBar": [t.entry_bar for t in trades],
+            "ExitBar": [t.exit_bar for t in trades],
+            "Ticker": [t.ticker for t in trades],
+            "Size": [t.size for t in trades],
+            "EntryPrice": [t.entry_price for t in trades],
+            "ExitPrice": [t.exit_price for t in trades],
+            "PnL": [t.pl for t in trades],
+            "ReturnPct": [t.pl_pct for t in trades],
+            "EntryTime": [t.entry_time for t in trades],
+            "ExitTime": [t.exit_time for t in trades],
+            "Tag": [t.tag for t in trades],
+            # Commission fields (0 when not enabled)
+            "EntryCommission": [
+                getattr(t, "entry_commission", 0.0) or 0.0 for t in trades
+            ],
+            "ExitCommission": [
+                getattr(t, "exit_commission", 0.0) or 0.0 for t in trades
+            ],
+            "CommissionTotal": [
+                getattr(t, "commission_total", 0.0) or 0.0 for t in trades
+            ],
+        }
+    )
+    trades_df["Duration"] = trades_df["ExitTime"] - trades_df["EntryTime"]
+    # Net PnL after commissions when available
+    if "CommissionTotal" in trades_df:
+        trades_df["PnLNet"] = trades_df["PnL"] - trades_df["CommissionTotal"]
+
+    return trades_df
+
+
+def _calculate_period_returns(equity_df, index, trade_start_bar):
+    """Calculate period returns and trading periods based on data frequency."""
+    gmean_period_return = 0
+    period_returns = np.array(np.nan)
+    annual_trading_periods = np.nan
+
+    if isinstance(index, pd.DatetimeIndex):
+        period = equity_df.index.to_series().diff().mean().days
+
+        if period <= 1:  # Daily data
+            period_returns = (
+                equity_df["Equity"]
+                .iloc[trade_start_bar:]
+                .resample("D")
+                .last()
+                .dropna()
+                .pct_change()
+            )
+            gmean_period_return = geometric_mean(period_returns)
+            annual_trading_periods = float(
+                365
+                if index.dayofweek.to_series().between(5, 6).mean() > 2 / 7 * 0.6
+                else 252
+            )
+        elif 28 <= period <= 31:  # Monthly data
+            period_returns = equity_df["Equity"].iloc[trade_start_bar:].pct_change()
+            gmean_period_return = geometric_mean(period_returns)
+            annual_trading_periods = 12
+        elif 365 <= period <= 366:  # Yearly data
+            period_returns = equity_df["Equity"].iloc[trade_start_bar:].pct_change()
+            gmean_period_return = geometric_mean(period_returns)
+            annual_trading_periods = 1
+        else:
+            warnings.warn(f"Unsupported data period from index: {period} days.")
+
+    return gmean_period_return, period_returns, annual_trading_periods
+
+
+def _calculate_risk_metrics(
+    gmean_period_return,
+    period_returns,
+    annual_trading_periods,
+    annualized_return,
+    risk_free_rate,
+):
+    """Calculate various risk metrics including Sharpe, Sortino, etc."""
+    metrics = {}
+
+    # Volatility calculation
+    volatility = (
+        np.sqrt(
+            (
+                period_returns.var(ddof=int(bool(period_returns.shape)))
+                + (1 + gmean_period_return) ** 2
+            )
+            ** annual_trading_periods
+            - (1 + gmean_period_return) ** (2 * annual_trading_periods)
+        )
+        * 100
+    )
+    metrics["Volatility (Ann.) %"] = volatility
+
+    # Sharpe Ratio
+    metrics["Sharpe Ratio"] = (annualized_return * 100 - risk_free_rate) / (
+        volatility or np.nan
+    )
+
+    # Sortino Ratio
+    with warnings.catch_warnings():
+        warnings.filterwarnings("error")
+        try:
+            metrics["Sortino Ratio"] = (annualized_return - risk_free_rate) / (
+                np.sqrt(np.mean(period_returns.clip(-np.inf, 0) ** 2))
+                * np.sqrt(annual_trading_periods)
+            )
+        except Warning:
+            metrics["Sortino Ratio"] = np.nan
+
+    return metrics
+
+
+def _calculate_trade_metrics(trades_df, pl, pl_net, returns):
+    """Calculate trade-related metrics."""
+    metrics = {}
+    n_trades = len(trades_df)
+
+    metrics["# Trades"] = n_trades
+    win_rate = np.nan if not n_trades else (pl > 0).mean()
+    metrics["Win Rate %"] = win_rate * 100
+    metrics["Best Trade %"] = returns.max() * 100
+    metrics["Worst Trade %"] = returns.min() * 100
+    metrics["Avg. Trade %"] = geometric_mean(returns) * 100
+    metrics["Profit Factor"] = returns[returns > 0].sum() / (
+        abs(returns[returns < 0].sum()) or np.nan
+    )
+    metrics["Expectancy %"] = returns.mean() * 100
+    metrics["SQN"] = np.sqrt(n_trades) * pl.mean() / (pl.std() or np.nan)
+    metrics["Kelly Criterion"] = win_rate - (1 - win_rate) / (
+        pl[pl > 0].mean() / -pl[pl < 0].mean()
+    )
+
+    # Commission metrics
+    if "CommissionTotal" in trades_df.columns:
+        metrics["Total Commission [$]"] = float(trades_df["CommissionTotal"].sum())
+        metrics["Profit Factor (Net)"] = pl_net[pl_net > 0].sum() / (
+            abs(pl_net[pl_net < 0].sum()) or np.nan
+        )
+
+    return metrics
+
+
 def compute_stats(
     orders: Union[List["Order"], pd.DataFrame],
     trades: Union[List["Trade"], pd.DataFrame],
@@ -53,17 +218,10 @@ def compute_stats(
     dd = 1 - equity["Equity"] / np.maximum.accumulate(equity["Equity"])
     dd_dur, dd_peaks = compute_drawdown_duration_peaks(pd.Series(dd, index=index))
 
-    if isinstance(orders, pd.DataFrame):
-        orders_df = orders
-    else:
-        orders_df = pd.DataFrame(
-            {
-                "SignalTime": [t.entry_time for t in orders],
-                "Ticker": [t.ticker for t in orders],
-                "Side": ["Buy" if t.size > 0 else "Sell" for t in orders],
-                "Size": [int(t.size) for t in orders],
-            }
-        ).set_index("SignalTime")
+    # Prepare DataFrames
+    orders_df = _prepare_orders_dataframe(orders)
+    trades_df = _prepare_trades_dataframe(trades)
+    del trades  # Free memory
 
     equity_df = pd.concat(
         [
@@ -73,43 +231,8 @@ def compute_stats(
         axis=1,
     )
 
-    if isinstance(trades, pd.DataFrame):
-        trades_df = trades
-    else:
-        # Came straight from Backtest.run()
-        trades_df = pd.DataFrame(
-            {
-                "EntryBar": [t.entry_bar for t in trades],
-                "ExitBar": [t.exit_bar for t in trades],
-                "Ticker": [t.ticker for t in trades],
-                "Size": [t.size for t in trades],
-                "EntryPrice": [t.entry_price for t in trades],
-                "ExitPrice": [t.exit_price for t in trades],
-                "PnL": [t.pl for t in trades],
-                "ReturnPct": [t.pl_pct for t in trades],
-                "EntryTime": [t.entry_time for t in trades],
-                "ExitTime": [t.exit_time for t in trades],
-                "Tag": [t.tag for t in trades],
-                # Commission fields (0 when not enabled)
-                "EntryCommission": [
-                    getattr(t, "entry_commission", 0.0) or 0.0 for t in trades
-                ],
-                "ExitCommission": [
-                    getattr(t, "exit_commission", 0.0) or 0.0 for t in trades
-                ],
-                "CommissionTotal": [
-                    getattr(t, "commission_total", 0.0) or 0.0 for t in trades
-                ],
-            }
-        )
-        trades_df["Duration"] = trades_df["ExitTime"] - trades_df["EntryTime"]
-        # Net PnL after commissions when available
-        if "CommissionTotal" in trades_df:
-            trades_df["PnLNet"] = trades_df["PnL"] - trades_df["CommissionTotal"]
-    del trades
-
+    # Extract key metrics
     pl = trades_df["PnL"]
-    # Net PnL after commissions if available
     pl_net = trades_df["PnLNet"] if "PnLNet" in trades_df.columns else pl
     returns = trades_df["ReturnPct"]
     durations = trades_df["Duration"]
@@ -120,18 +243,18 @@ def compute_stats(
         resolution = getattr(_period, "resolution_string", None) or _period.resolution
         return value.ceil(resolution)
 
+    # Initialize results series
     s = pd.Series(dtype=object)
     s.loc["Start"] = index[0]
     s.loc["End"] = index[-1]
     s.loc["Duration"] = s.End - s.Start
 
+    # Calculate exposure time
     have_position = np.repeat(0, len(index))
     for t in trades_df.itertuples(index=False):
         have_position[t.EntryBar : t.ExitBar + 1] = 1
 
-    s.loc["Exposure Time %"] = (
-        have_position.mean() * 100
-    )  # In "n bars" time, not index time
+    s.loc["Exposure Time %"] = have_position.mean() * 100
     s.loc["Equity Final [$]"] = equity["Equity"].iloc[-1]
     s.loc["Equity Peak [$]"] = equity["Equity"].max()
     s.loc["Return %"] = (
@@ -140,104 +263,43 @@ def compute_stats(
         * 100
     )
 
-    gmean_period_return: float = 0
-    period_returns = np.array(np.nan)
-    annual_trading_periods = np.nan
-    if isinstance(index, pd.DatetimeIndex):
-        period = equity.index.to_series().diff().mean().days
-        if period <= 1:
-            period_returns = (
-                equity_df["Equity"]
-                .iloc[trade_start_bar:]
-                .resample("D")
-                .last()
-                .dropna()
-                .pct_change()
-            )
-            gmean_period_return = geometric_mean(period_returns)
-            annual_trading_periods = float(
-                365
-                if index.dayofweek.to_series().between(5, 6).mean() > 2 / 7 * 0.6
-                else 252
-            )
-        elif period >= 28 and period <= 31:
-            period_returns = equity_df["Equity"].iloc[trade_start_bar:].pct_change()
-            gmean_period_return = geometric_mean(period_returns)
-            annual_trading_periods = 12
-        elif period >= 365 and period <= 366:
-            period_returns = equity_df["Equity"].iloc[trade_start_bar:].pct_change()
-            gmean_period_return = geometric_mean(period_returns)
-            annual_trading_periods = 1
-        else:
-            warnings.warn(f"Unsupported data period from index: {period} days.")
+    # Calculate period returns and annualized metrics
+    gmean_period_return, period_returns, annual_trading_periods = (
+        _calculate_period_returns(equity_df, index, trade_start_bar)
+    )
 
-    # Annualized return and risk metrics are computed based on the (mostly correct)
-    # assumption that the returns are compounded. See: https://dx.doi.org/10.2139/ssrn.3054517
-    # Our annualized return matches `empyrical.annual_return(day_returns)` whereas
-    # our risk doesn't; they use the simpler approach below.
     annualized_return = (1 + gmean_period_return) ** annual_trading_periods - 1
     s.loc["Return (Ann.) %"] = annualized_return * 100
-    s.loc["Volatility (Ann.) %"] = (
-        np.sqrt(
-            (
-                period_returns.var(ddof=int(bool(period_returns.shape)))
-                + (1 + gmean_period_return) ** 2
-            )
-            ** annual_trading_periods
-            - (1 + gmean_period_return) ** (2 * annual_trading_periods)
-        )
-        * 100
-    )  # noqa: E501
-    # s.loc['Return (Ann.) %'] = gmean_day_return * annual_trading_days * 100
-    # s.loc['Risk (Ann.) %'] = day_returns.std(ddof=1) * np.sqrt(annual_trading_days) * 100
 
-    # Our Sharpe mismatches `empyrical.sharpe_ratio()` because they use arithmetic mean return
-    # and simple standard deviation
-    s.loc["Sharpe Ratio"] = (s.loc["Return (Ann.) %"] - risk_free_rate) / (
-        s.loc["Volatility (Ann.) %"] or np.nan
-    )  # noqa: E501
-    with warnings.catch_warnings():
-        # wrap to catch RuntimeWarning: divide by zero encountered in scalar divide
-        warnings.filterwarnings("error")
-        try:
-            # Our Sortino mismatches `empyrical.sortino_ratio()` because they use arithmetic mean return
-            s.loc["Sortino Ratio"] = (annualized_return - risk_free_rate) / (
-                np.sqrt(np.mean(period_returns.clip(-np.inf, 0) ** 2))
-                * np.sqrt(annual_trading_periods)
-            )  # noqa: E501
-        except Warning:
-            s.loc["Sortino Ratio"] = np.nan
+    # Calculate risk metrics
+    risk_metrics = _calculate_risk_metrics(
+        gmean_period_return,
+        period_returns,
+        annual_trading_periods,
+        annualized_return,
+        risk_free_rate,
+    )
+    for key, value in risk_metrics.items():
+        s.loc[key] = value
+
+    # Drawdown metrics
     max_dd = -np.nan_to_num(dd.max())
     s.loc["Calmar Ratio"] = annualized_return / (-max_dd or np.nan)
     s.loc["Max. Drawdown %"] = max_dd * 100
     s.loc["Avg. Drawdown %"] = -dd_peaks.mean() * 100
     s.loc["Max. Drawdown Duration"] = _round_timedelta(dd_dur.max())
     s.loc["Avg. Drawdown Duration"] = _round_timedelta(dd_dur.mean())
-    s.loc["# Trades"] = n_trades = len(trades_df)
-    win_rate = np.nan if not n_trades else (pl > 0).mean()
-    s.loc["Win Rate %"] = win_rate * 100
-    s.loc["Best Trade %"] = returns.max() * 100
-    s.loc["Worst Trade %"] = returns.min() * 100
-    mean_return = geometric_mean(returns)
-    s.loc["Avg. Trade %"] = mean_return * 100
+
+    # Duration metrics
     s.loc["Max. Trade Duration"] = _round_timedelta(durations.max())
     s.loc["Avg. Trade Duration"] = _round_timedelta(durations.mean())
-    s.loc["Profit Factor"] = returns[returns > 0].sum() / (
-        abs(returns[returns < 0].sum()) or np.nan
-    )  # noqa: E501
-    s.loc["Expectancy %"] = returns.mean() * 100
-    s.loc["SQN"] = np.sqrt(n_trades) * pl.mean() / (pl.std() or np.nan)
-    s.loc["Kelly Criterion"] = win_rate - (1 - win_rate) / (
-        pl[pl > 0].mean() / -pl[pl < 0].mean()
-    )
 
-    # Commission summary and net profit factor
-    if "CommissionTotal" in trades_df.columns:
-        s.loc["Total Commission [$]"] = float(trades_df["CommissionTotal"].sum())
-        s.loc["Profit Factor (Net)"] = pl_net[pl_net > 0].sum() / (
-            abs(pl_net[pl_net < 0].sum()) or np.nan
-        )
+    # Trade metrics
+    trade_metrics = _calculate_trade_metrics(trades_df, pl, pl_net, returns)
+    for key, value in trade_metrics.items():
+        s.loc[key] = value
 
+    # Store reference data
     s.loc["_strategy"] = strategy_instance
     s.loc["_equity_curve"] = equity_df
     s.loc["_trades"] = trades_df
@@ -245,8 +307,7 @@ def compute_stats(
     s.loc["_positions"] = positions
     s.loc["_trade_start_bar"] = trade_start_bar
 
-    s = _Stats(s)
-    return s
+    return _Stats(s)
 
 
 class _Stats(pd.Series):

@@ -4,8 +4,13 @@ import numpy as np
 import pandas as pd
 
 from minitrade.utils.mtdb import MTDB
-
-from .fixture import *
+from .fixture import (
+    TradePlan,
+    BacktestRunner,
+    Broker,
+    BrokerAccount,
+    Trader,
+)
 
 
 def test_invalid_plan(clean_db, create_strategies, launch_scheduler):
@@ -65,19 +70,19 @@ def test_run_backtest_strict(clean_db, create_strategies, launch_scheduler):
     # Test dryrun mode
     run_id = MTDB.uniqueid()
     assert runner.run_backtest(run_id=run_id, dryrun=True) is not None
-    assert plan.get_log(run_id).error == False
+    assert not plan.get_log(run_id).error
     assert not plan.get_orders()
 
     # Test strict mode
     run_id = MTDB.uniqueid()
     assert runner.run_backtest(run_id=run_id) is not None
-    assert plan.get_log(run_id).error == False
+    assert not plan.get_log(run_id).error
     assert len(plan.get_orders(run_id=run_id)) > 0
 
     # Test runs are repeatable in strict mode
     run_id = MTDB.uniqueid()
     assert runner.run_backtest(run_id=run_id) is not None
-    assert plan.get_log(run_id).error == False
+    assert not plan.get_log(run_id).error
     assert len(plan.get_orders(run_id=run_id)) == 0
 
     # Test submit orders
@@ -119,22 +124,22 @@ def test_run_backtest_incremental(clean_db, create_strategies, launch_scheduler)
     # Test dryrun mode
     run_id = MTDB.uniqueid()
     assert runner.run_backtest(run_id=run_id, dryrun=True) is not None
-    assert plan.get_log(run_id).error == False
+    assert not plan.get_log(run_id).error
     assert not plan.get_orders()
 
     # Test incremental mode
     run_id = MTDB.uniqueid()
     assert runner.run_backtest(run_id=run_id) is not None
-    assert plan.get_log(run_id).error == False
+    assert not plan.get_log(run_id).error
     assert len(plan.get_orders(run_id=run_id)) == 1
     prev_run_id = run_id
 
     # Test runs are incremental
     run_id = MTDB.uniqueid()
     assert runner.run_backtest(run_id=run_id) is not None
-    assert plan.get_log(run_id).error == False
+    assert not plan.get_log(run_id).error
     assert len(plan.get_orders(run_id=run_id)) == 1
-    assert plan.get_orders(run_id=prev_run_id)[0].cancelled == True
+    assert plan.get_orders(run_id=prev_run_id)[0].cancelled
 
     # Test submit orders
     broker = Broker.get_broker(BrokerAccount.get_account(plan.broker_account))

@@ -215,6 +215,59 @@ def compute_stats(
     )
 
 
+def _get_default_agg(series):
+    """Get default aggregation function for series."""
+    agg = OHLCV_AGG.get(getattr(series, "name", ""), "last")
+    if isinstance(series, pd.DataFrame):
+        agg = {column: OHLCV_AGG.get(column, "last") for column in series.columns}
+    return agg
+
+
+def _get_strategy_wrapper():
+    """Find Strategy.I wrapper by inspecting stack frames."""
+    strategy_I = None
+    frame, level = currentframe(), 0
+    while frame and level <= 3:
+        frame = frame.f_back
+        level += 1
+        if isinstance(frame.f_locals.get("self"), Strategy):  # type: ignore
+            strategy_I = frame.f_locals["self"].I  # type: ignore
+            break
+
+    if strategy_I is None:
+
+        def strategy_I(func, *args, **kwargs):
+            return func(*args, **kwargs)
+
+    return strategy_I
+
+
+def _convert_result_to_pandas(result, resampled):
+    """Convert function result to pandas DataFrame or Series if needed."""
+    if isinstance(result, (pd.DataFrame, pd.Series)):
+        return result
+
+    result = np.asarray(result)
+    if result.ndim == 1:
+        return pd.Series(result, name=resampled.name)
+    elif result.ndim == 2:
+        return pd.DataFrame(result.T)
+    else:
+        return result
+
+
+def _reindex_to_original_series(result, resampled, original_series):
+    """Reindex result back to original series index."""
+    if not isinstance(result.index, pd.DatetimeIndex):
+        result.index = resampled.index
+
+    result = result.reindex(
+        index=original_series.index.union(resampled.index), method="ffill"
+    ).reindex(original_series.index)
+
+    return result
+
+
 def resample_apply(
     rule: str,
     func: Optional[Callable[..., Sequence]],
@@ -294,47 +347,27 @@ http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
                 self.sma = self.I(SMA, daily, 10, plot=False)
 
     """
+    # Set up default function if none provided
     if func is None:
 
         def func(x, *_, **__):
             return x
 
+    # Determine aggregation method
     if agg is None:
-        agg = OHLCV_AGG.get(getattr(series, "name", ""), "last")
-        if isinstance(series, pd.DataFrame):
-            agg = {column: OHLCV_AGG.get(column, "last") for column in series.columns}
+        agg = _get_default_agg(series)
 
+    # Resample the series
     resampled = series.resample(rule, label="right").agg(agg).dropna()
     resampled.name = _as_str(series) + "[" + rule + "]"
 
-    # Check first few stack frames if we are being called from
-    # inside Strategy.init, and if so, extract Strategy.I wrapper.
-    frame, level = currentframe(), 0
-    while frame and level <= 3:
-        frame = frame.f_back
-        level += 1
-        if isinstance(frame.f_locals.get("self"), Strategy):  # type: ignore
-            strategy_I = frame.f_locals["self"].I  # type: ignore
-            break
-    else:
-
-        def strategy_I(func, *args, **kwargs):
-            return func(*args, **kwargs)
+    # Get Strategy wrapper
+    strategy_I = _get_strategy_wrapper()
 
     def wrap_func(resampled, *args, **kwargs):
         result = func(resampled, *args, **kwargs)
-        if not isinstance(result, pd.DataFrame) and not isinstance(result, pd.Series):
-            result = np.asarray(result)
-            if result.ndim == 1:
-                result = pd.Series(result, name=resampled.name)
-            elif result.ndim == 2:
-                result = pd.DataFrame(result.T)
-        # Resample back to data index
-        if not isinstance(result.index, pd.DatetimeIndex):
-            result.index = resampled.index
-        result = result.reindex(
-            index=series.index.union(resampled.index), method="ffill"
-        ).reindex(series.index)
+        result = _convert_result_to_pandas(result, resampled)
+        result = _reindex_to_original_series(result, resampled, series)
         return result
 
     wrap_func.__name__ = func.__name__

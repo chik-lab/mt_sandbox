@@ -1034,9 +1034,9 @@ class TestUtil(TestCase):
         assert np.array_equal(a, arr)
         assert a.df.equals(df)
         with self.assertRaises(ValueError):
-            b = _Array(arr, None)
+            _Array(arr, None)
         with self.assertRaises(ValueError):
-            b = _Array(arr, 1)
+            _Array(arr, 1)
 
     def test_array_pickling(self):
         df = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})

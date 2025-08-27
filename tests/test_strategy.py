@@ -1,4 +1,6 @@
-from .fixture import *
+import os
+
+from .fixture import StrategyManager, Strategy
 
 
 def test_strategy_manager(clean_strategy):
@@ -14,5 +16,5 @@ def test_strategy_manager(clean_strategy):
         assert issubclass(strategy, Strategy)
     for file in StrategyManager.list():
         StrategyManager.delete(file)
-        st_loc = os.path.join(os.path.expanduser(f"~/.minitrade/strategy"), file)
-        assert os.path.exists(st_loc) == False
+        st_loc = os.path.join(os.path.expanduser("~/.minitrade/strategy"), file)
+        assert not os.path.exists(st_loc)

@@ -71,4 +71,4 @@ class EastMoneyQuoteSource(QuoteSource):
             }
             return pd.Series(data, name=datetime.now(timezone.utc)).astype(float)
         except Exception as e:
-            raise AttributeError(f"Data error") from e
+            raise AttributeError("Data error") from e

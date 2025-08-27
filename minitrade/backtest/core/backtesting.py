@@ -643,8 +643,8 @@ class Strategy(ABC):
             setattr(self, k, v)
         return params
 
-    def I(
-        self,  # noqa: E743
+    def I(  # noqa: E743
+        self,
         funcval: Union[pd.DataFrame, pd.Series, Callable],
         *args,
         name=None,
@@ -2913,7 +2913,7 @@ class Backtest:
         opened in the default web browser.
 
         If `plot_allocation` is `True`, the resulting plot will contain
-        an equity allocation graph section. 
+        an equity allocation graph section.
 
         If `relative_allocation` is `True`, scale and label equity allocation graph axis
         with return percent, not absolute cash-equivalent values.

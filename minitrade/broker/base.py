@@ -118,7 +118,7 @@ class OrderValidator:
         ]
 
     def _assert(self, condition, message):
-        if condition != True:
+        if not condition:
             raise AttributeError(message)
 
     def _assert_is_null(self, value, message):

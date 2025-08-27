@@ -3,8 +3,7 @@ import pytest
 from pandas.testing import assert_series_equal
 
 from minitrade.backtest.core.backtesting import Allocation
-
-from .fixture import *
+from .fixture import Strategy, Backtest
 
 
 class TestAllocation:

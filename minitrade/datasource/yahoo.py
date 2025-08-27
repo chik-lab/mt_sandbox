@@ -175,4 +175,4 @@ class YahooQuoteSource(QuoteSource):
             df = pd.Series(data, name=datetime.now(timezone.utc)).astype(float)
             return df
         except Exception as e:
-            raise AttributeError(f"Data error") from e
+            raise AttributeError("Data error") from e

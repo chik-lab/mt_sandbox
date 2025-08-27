@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import typing
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import datetime
 
 import pandas as pd
 
 from minitrade.broker import Broker, BrokerAccount
 from minitrade.broker.base import OrderValidator
-from minitrade.trader import RawOrder, TradePlan
 from minitrade.utils.mtdb import MTDB
 
 if typing.TYPE_CHECKING:

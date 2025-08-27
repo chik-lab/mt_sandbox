@@ -1,5 +1,6 @@
-import sys
 import os
+import sys
+
 import pandas as pd
 
 # Add the algo directory to Python path

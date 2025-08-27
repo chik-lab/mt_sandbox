@@ -137,81 +137,112 @@ def about_source(source):
         st.write("Unknown data source")
 
 
-def config_source(source):
-    if source == "Yahoo":
-        proxy = (
-            st.text_input(
-                "HTTP Proxy (Socks proxy not supported)",
-                placeholder="http://host:port",
-                value=config.sources.yahoo.proxy or "",
-            )
-            or None
+def _config_yahoo():
+    """Configure Yahoo data source."""
+    proxy = (
+        st.text_input(
+            "HTTP Proxy (Socks proxy not supported)",
+            placeholder="http://host:port",
+            value=config.sources.yahoo.proxy or "",
         )
-        if st.button("Test and save"):
-            test_and_save_yahoo_proxy(proxy)
-    elif source == "EastMoney":
-        st.write("Nothing to configure")
-    elif source == "EODHistoricalData":
-        api_key = (
-            st.text_input("API Key", value=config.sources.eodhd.api_key or "") or None
+        or None
+    )
+    if st.button("Test and save"):
+        test_and_save_yahoo_proxy(proxy)
+
+
+def _config_api_key_source(source_name, config_attr, test_func):
+    """Configure sources that only need an API key."""
+    api_key = (
+        st.text_input(
+            "API Key", value=getattr(config.sources, config_attr).api_key or ""
         )
-        if st.button("Test and save"):
-            test_and_save_eodhd_api_key(api_key)
-    elif source == "TwelveData":
-        api_key = (
-            st.text_input("API Key", value=config.sources.twelvedata.api_key or "")
-            or None
+        or None
+    )
+    if st.button("Test and save"):
+        test_func(api_key)
+
+
+def _config_alpaca():
+    """Configure Alpaca data source."""
+    api_key = (
+        st.text_input("API Key", value=config.sources.alpaca.api_key or "") or None
+    )
+    api_secret = (
+        st.text_input("API Secret", value=config.sources.alpaca.api_secret or "")
+        or None
+    )
+    if st.button("Test and save"):
+        test_and_save_alpaca_api_key(api_key, api_secret)
+
+
+def _config_interactive_brokers():
+    """Configure Interactive Brokers data source."""
+    accounts = [_ for _ in BrokerAccount.list() if _.broker == "IB"]
+    if len(accounts) == 0:
+        st.warning(
+            "Please make sure you have configured your IB account in the broker section."
         )
-        if st.button("Test and save"):
-            test_and_save_twelvedata_api_key(api_key)
-    elif source == "Alpaca":
-        api_key = (
-            st.text_input("API Key", value=config.sources.alpaca.api_key or "") or None
+        return
+
+    alias = st.selectbox("Use for data access", [_.alias for _ in accounts])
+    if st.button("Save"):
+        config.sources.ib.account = alias
+        config.save()
+        st.success("Setting saved")
+
+    if config.sources.ib.account:
+        st.success(
+            f'Currently using account "**{config.sources.ib.account}**" for data access.'
         )
-        api_secret = (
-            st.text_input("API Secret", value=config.sources.alpaca.api_secret or "")
-            or None
-        )
-        if st.button("Test and save"):
-            test_and_save_alpaca_api_key(api_key, api_secret)
-    elif source == "Tiingo":
-        api_key = (
-            st.text_input("API Key", value=config.sources.tiingo.api_key or "") or None
-        )
-        if st.button("Test and save"):
-            test_and_save_tiingo_api_key(api_key)
-    elif source == "InteractiveBrokers":
-        accounts = [_ for _ in BrokerAccount.list() if _.broker == "IB"]
-        if len(accounts) == 0:
-            st.warning(
-                "Please make sure you have configured your IB account in the broker section."
-            )
-            return
-        alias = st.selectbox("Use for data access", [_.alias for _ in accounts])
-        if st.button("Save"):
-            config.sources.ib.account = alias
-            config.save()
-            st.success("Setting saved")
-        if config.sources.ib.account:
-            st.success(
-                f'Currently using account "**{config.sources.ib.account}**" for data access.'
-            )
+    else:
+        st.error("No account is currently configured for data access.")
+
+
+def _config_union_source(source):
+    """Configure union data source."""
+    st.write("This is an union data source configured as follows:")
+    union_config = UnionQuoteSourceConfig.get_config(source).config
+    for ticker, name, params in union_config:
+        st.caption(ticker or "Catch-all")
+        if params:
+            params = ", ".join([f"{k}={v}" for k, v in params.items()])
+            st.code(f'QuoteSource.get_source("{name}", {params})')
         else:
-            st.error("No account is currently configured for data access.")
-    elif source == "CboeIndex":
-        st.write("Nothing to configure")
-    elif source == "CboeFutures":
-        st.write("Nothing to configure")
+            st.code(f'QuoteSource.get_source("{name}")')
+
+
+def _config_no_config():
+    """Show message for sources with no configuration."""
+    st.write("Nothing to configure")
+
+
+def config_source(source):
+    """Configure data source based on source type."""
+    # Define configuration mapping
+    config_handlers = {
+        "Yahoo": _config_yahoo,
+        "EastMoney": _config_no_config,
+        "EODHistoricalData": lambda: _config_api_key_source(
+            "EODHistoricalData", "eodhd", test_and_save_eodhd_api_key
+        ),
+        "TwelveData": lambda: _config_api_key_source(
+            "TwelveData", "twelvedata", test_and_save_twelvedata_api_key
+        ),
+        "Alpaca": _config_alpaca,
+        "Tiingo": lambda: _config_api_key_source(
+            "Tiingo", "tiingo", test_and_save_tiingo_api_key
+        ),
+        "InteractiveBrokers": _config_interactive_brokers,
+        "CboeIndex": _config_no_config,
+        "CboeFutures": _config_no_config,
+    }
+
+    # Handle specific sources
+    if source in config_handlers:
+        config_handlers[source]()
     elif source in UnionQuoteSource.list():
-        st.write("This is an union data source configured as follows:")
-        union_config = UnionQuoteSourceConfig.get_config(source).config
-        for ticker, name, params in union_config:
-            st.caption(ticker or "Catch-all")
-            if params:
-                params = ", ".join([f"{k}={v}" for k, v in params.items()])
-                st.code(f'QuoteSource.get_source("{name}", {params})')
-            else:
-                st.code(f'QuoteSource.get_source("{name}")')
+        _config_union_source(source)
     else:
         st.write("Unknown data source")
 
@@ -382,7 +413,94 @@ def lookup_ticker():
                         st.write(f'{item["id"]} - {item["label"]}')
 
 
+def _parse_json_params(params_str, error_prefix=""):
+    """Parse JSON parameters with error handling."""
+    if not params_str:
+        return None
+    try:
+        return json.loads(params_str)
+    except Exception as e:
+        st.error(f"{error_prefix}Invalid JSON: {e}")
+        return False  # Signal error
+
+
+def _create_source_tabs():
+    """Create and handle source configuration tabs."""
+    tabs = st.tabs("12345678")
+    ticker = [None] * 8
+    name = [None] * 8
+    params = [None] * 8
+
+    for i, tab in enumerate(tabs):
+        with tab:
+            ticker[i] = st.text_input(
+                "Tickers (comma separated list without space)", key=f"ticker_{i}"
+            )
+            name[i] = st.selectbox(
+                "Source", QuoteSource.SYSTEM_SOURCES, key=f"name_{i}"
+            )
+            params_str = (
+                st.text_input(
+                    "Params (parameters to be passed to `QuoteSource.get_source()` in JSON format)",
+                    key=f"params_{i}",
+                    placeholder="{}",
+                )
+                or None
+            )
+
+            parsed_params = _parse_json_params(params_str)
+            if parsed_params is False:  # JSON parsing error
+                params[i] = None
+            else:
+                params[i] = parsed_params
+
+    return ticker, name, params
+
+
+def _create_catchall_config():
+    """Create catchall source configuration."""
+    catchall = st.selectbox("Source", [None] + QuoteSource.SYSTEM_SOURCES)
+    catchall_params_str = st.text_input("Params") or None
+
+    catchall_params = _parse_json_params(catchall_params_str)
+    if catchall_params is False:  # JSON parsing error
+        return catchall, None
+
+    return catchall, catchall_params
+
+
+def _validate_and_save_union_source(
+    source_name, ticker, name, params, catchall, catchall_params
+):
+    """Validate inputs and save union source configuration."""
+    if not source_name:
+        st.error("Data source name is required")
+        return False
+
+    if source_name in QuoteSource.SYSTEM_SOURCES:
+        st.error(f'"{source_name}" is a built-in data source')
+        return False
+
+    # Build union configuration
+    union_config = [(t, n, p) for t, n, p in zip(ticker, name, params) if t and n]
+    if catchall:
+        union_config.append((None, catchall, catchall_params))
+
+    try:
+        UnionQuoteSource(union_config)  # test if the config is valid
+        union = UnionQuoteSourceConfig(
+            name=source_name, config=union_config, update_time=datetime.utcnow()
+        )
+        union.save()
+        st.success(f'Union data source "{source_name}" saved')
+        return True
+    except Exception as e:
+        st.error(f"Failed to create union source: {e}")
+        return False
+
+
 def create_union_source():
+    """Create union data source configuration interface."""
     st.subheader("Create union data source")
     st.info(
         "A union data source let you retrieve data for different tickers using different data sources. "
@@ -391,57 +509,17 @@ def create_union_source():
     )
 
     source_name = st.text_input("Data source name")
+
     with st.expander("Sources", expanded=True):
-        tabs = st.tabs("12345678")
-        ticker = [None] * 8
-        name = [None] * 8
-        params = [None] * 8
-        for i, tab in enumerate(tabs):
-            with tab:
-                ticker[i] = st.text_input(
-                    "Tickers (comma separated list without space)", key=f"ticker_{i}"
-                )
-                name[i] = st.selectbox(
-                    "Source", QuoteSource.SYSTEM_SOURCES, key=f"name_{i}"
-                )
-                params[i] = (
-                    st.text_input(
-                        "Params (parameters to be passed to `QuoteSource.get_source()` in JSON format)",
-                        key=f"params_{i}",
-                        placeholder="{}",
-                    )
-                    or None
-                )
-                try:
-                    if params[i]:
-                        params[i] = json.loads(params[i])
-                except Exception as e:
-                    st.error(f"Invalid JSON: {e}")
+        ticker, name, params = _create_source_tabs()
+
     with st.expander("Catch-all source", expanded=True):
-        catchall = st.selectbox("Source", [None] + QuoteSource.SYSTEM_SOURCES)
-        catchall_params = st.text_input("Params") or None
-        try:
-            if catchall_params:
-                json.loads(catchall_params)
-        except Exception as e:
-            st.error(f"Invalid JSON: {e}")
-    save = st.button("Save")
-    if save:
-        if not source_name:
-            st.error("Data source name is required")
-            return
-        elif source_name in QuoteSource.SYSTEM_SOURCES:
-            st.error(f'"{source_name}" is a built-in data source')
-            return
-        union_config = [(t, n, p) for t, n, p in zip(ticker, name, params) if t and n]
-        if catchall:
-            union_config.append((None, catchall, catchall_params))
-        UnionQuoteSource(union_config)  # test if the config is valid
-        union = UnionQuoteSourceConfig(
-            name=source_name, config=union_config, update_time=datetime.utcnow()
+        catchall, catchall_params = _create_catchall_config()
+
+    if st.button("Save"):
+        _validate_and_save_union_source(
+            source_name, ticker, name, params, catchall, catchall_params
         )
-        union.save()
-        st.success(f'Union data source "{source_name}" saved')
 
 
 action = st.sidebar.radio("Action", ["Config", "Create", "Inspect", "Lookup (IB only)"])

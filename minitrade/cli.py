@@ -244,7 +244,7 @@ def check_program_version(name, path=None):
         version = proc.stdout.split("\n")[0]
         click.secho(f"  {name:15s} ... found {version}", fg="green")
         return True
-    except Exception as e:
+    except Exception:
         click.secho(f"  {name:15s} ... missing", fg="red")
         return False
 
@@ -371,7 +371,7 @@ def init(yes):
         click.confirm("Do you want to continue?", abort=True)
 
     # create dirs
-    click.secho(f"Setting up directories...")
+    click.secho("Setting up directories...")
     for d in ["database", "strategy", "storage", "ibgateway", "task"]:
         os.makedirs(os.path.join(minitrade_root, d), mode=0o700, exist_ok=True)
 
@@ -391,7 +391,7 @@ def init(yes):
 
 
 def build_db_schema(minitrade_root):
-    click.secho(f"Setting up database...")
+    click.secho("Setting up database...")
     db_loc = os.path.join(minitrade_root, "database/minitrade.db")
     sqlfiles = [
         f
@@ -437,7 +437,7 @@ def build_db_schema(minitrade_root):
 
 def install_ibgateway(minitrade_root):
     try:
-        click.secho(f"Installing Interactive Brokers gateway...")
+        click.secho("Installing Interactive Brokers gateway...")
         ib_loc = os.path.join(minitrade_root, "ibgateway")
         url = "https://download2.interactivebrokers.com/portal/clientportal.gw.zip"
         response = requests.get(url, stream=True)
@@ -467,7 +467,7 @@ def install_ibgateway(minitrade_root):
         conf["ips"]["deny"] = []
         with open(conf_loc, "w") as f:
             yaml.safe_dump(conf, f)
-    except Exception as e:
+    except Exception:
         click.secho(
             "We have some issue with installing IB gateway. If you use Minitrade solely for backtesting, you can safely ignore this.",
             fg="red",

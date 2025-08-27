@@ -5,7 +5,10 @@
 import itertools
 import random
 from math import copysign
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from minitrade.trader import TradePlan
 
 import matplotlib
 import matplotlib.pyplot as plt

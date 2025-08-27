@@ -65,7 +65,7 @@ def display_process_status():
 
 
 def display_trade_status():
-    st.caption(f"Scheduled Trade Plans")
+    st.caption("Scheduled Trade Plans")
     try:
         data = __call_scheduler("GET", "/strategy")
         if len(data) == 0:
@@ -77,15 +77,15 @@ def display_trade_status():
 
 
 def display_task_status():
-    st.caption(f"Scheduled Tasks")
+    st.caption("Scheduled Tasks")
     try:
         data = __call_scheduler("GET", "/task")
         if len(data) == 0:
             st.text("No task is scheduled.")
         else:
             st.write(pd.DataFrame(data))
-    except Exception as e:
-        st.error(f"Failed to get task status. Try refresh.")
+    except Exception:
+        st.error("Failed to get task status. Try refresh.")
 
 
 def display_ib_gateway_status():

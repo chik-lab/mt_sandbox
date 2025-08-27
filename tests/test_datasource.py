@@ -11,9 +11,6 @@ from minitrade.datasource.base import QuoteSource
 from minitrade.datasource.cboe_futures import CboeFuturesQuoteSource
 from minitrade.datasource.union import UnionQuoteSource
 from minitrade.datasource.yahoo import YahooQuoteSource
-from minitrade.utils.mtdb import MTDB
-
-from .fixture import *
 
 
 class MockQuoteSource(QuoteSource):
@@ -196,7 +193,7 @@ class TestYahooQuoteSource:
             if ticker == "AAPL":
                 assert df.index[0].strftime("%Y-%m-%d") == "2022-01-03"
             assert df.index[-1].strftime("%Y-%m-%d") == end
-            assert df.notna().all(axis=None) == True
+            assert df.notna().all(axis=None)
 
     def test_minute_bar(self, quote_source):
         ticker = "AAPL"
@@ -621,7 +618,7 @@ date	Open	High	Low	Close	Volume	expire_date
         assert df.index[0].strftime("%Y-%m-%d") == "2022-01-03"
         assert df.index[-1].strftime("%Y-%m-%d") == end
         assert df.index.duplicated().sum() == 0
-        assert df.notna().all(axis=None) == True
+        assert df.notna().all(axis=None)
 
         # Test case 2: Test getting daily bar data for a specific ticker and date range
         ticker = "VXF24"
@@ -641,7 +638,7 @@ date	Open	High	Low	Close	Volume	expire_date
         assert df.index[0].strftime("%Y-%m-%d") == "2023-04-24"
         assert df.index[-1].strftime("%Y-%m-%d") == "2024-01-17"
         assert df.index.duplicated().sum() == 0
-        assert df.notna().all(axis=None) == True
+        assert df.notna().all(axis=None)
 
     def test__minute_bar(self, quote_source):
         # Test case 1: Test getting minute bar data for a specific ticker, date range, and interval

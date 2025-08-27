@@ -7,10 +7,49 @@ from pathlib import Path
 
 import pytest
 
-from minitrade.backtest import *
-from minitrade.broker import *
-from minitrade.datasource import *
-from minitrade.trader import *
+from minitrade.backtest import Backtest, Strategy
+from minitrade.broker import BrokerAccount, Broker, OrderValidator
+from minitrade.datasource import QuoteSource
+from minitrade.trader import (
+    TradePlan,
+    StrategyManager,
+    RawOrder,
+    BacktestLog,
+    BacktestRunner,
+    TraderLog,
+    Trader,
+    TaskManager,
+    TaskPlan,
+    TaskLog,
+    TaskRunner,
+)
+
+# Re-export for test modules
+__all__ = [
+    "Backtest",
+    "Strategy",
+    "BrokerAccount",
+    "Broker",
+    "OrderValidator",
+    "QuoteSource",
+    "TradePlan",
+    "StrategyManager",
+    "RawOrder",
+    "BacktestLog",
+    "BacktestRunner",
+    "TraderLog",
+    "Trader",
+    "TaskManager",
+    "TaskPlan",
+    "TaskLog",
+    "TaskRunner",
+    "clean_db",
+    "clean_strategy",
+    "create_account",
+    "create_strategies",
+    "launch_scheduler",
+    "launch_ibgateway",
+]
 
 
 @pytest.fixture

@@ -204,7 +204,7 @@ class InteractiveBrokers(Broker):
             )
             account["performance"] = self.call_ibgateway(
                 "POST",
-                f"/pa/performance",
+                "/pa/performance",
                 json={"acctIds": [account["id"]], "freq": "D"},
             )
         return accounts

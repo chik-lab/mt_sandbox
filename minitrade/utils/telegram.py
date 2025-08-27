@@ -148,7 +148,7 @@ class TelegramBot:
                     )
             else:
                 await context.bot.send_message(
-                    chat_id=update.effective_chat.id, text=f"No strategy scheduled"
+                    chat_id=update.effective_chat.id, text="No strategy scheduled"
                 )
 
     async def task(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -191,7 +191,7 @@ class TelegramBot:
                     )
             else:
                 await context.bot.send_message(
-                    chat_id=update.effective_chat.id, text=f"No task scheduled"
+                    chat_id=update.effective_chat.id, text="No task scheduled"
                 )
 
     async def ib(self, update: Update, context: ContextTypes.DEFAULT_TYPE):

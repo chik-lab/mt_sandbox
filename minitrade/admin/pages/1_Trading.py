@@ -5,7 +5,7 @@ from datetime import datetime, time, timedelta
 import pandas as pd
 import pandas_market_calendars as mcal
 import streamlit as st
-from matplotlib import pyplot as plt
+
 from tabulate import tabulate
 
 from minitrade.backtest import calculate_trade_stats
@@ -78,21 +78,8 @@ def parse_trade_time_of_day(trade_time_of_day: str) -> str:
         return None
 
 
-def show_create_trade_plan_form() -> TradePlan | None:
-    account = st.selectbox(
-        "Select a broker account", BrokerAccount.list(), format_func=lambda b: b.alias
-    )
-    strategy_file = st.selectbox("Pick a strategy", StrategyManager.list())
-    data_source = st.selectbox(
-        "Select a data source",
-        QuoteSource.list() + [None],
-        index=QuoteSource.list().index("Yahoo"),
-        format_func=lambda x: x or "Use Strategy.prepare_data()",
-    )
-    ticker_css = st.text_input(
-        "Define the asset space (a list of tickers separated by comma without space)",
-        placeholder="e.g. AAPL,GOOG",
-    )
+def _get_market_config(data_source, ticker_css):
+    """Get market calendar and timezone configuration."""
     market_calendar, market_timezone = None, None
     try:
         if data_source:
@@ -101,6 +88,7 @@ def show_create_trade_plan_form() -> TradePlan | None:
             )
     except Exception as e:
         st.warning(f"{e}. Please select market and timezone manually.")
+
     c1, c2 = st.columns(2)
     markets = mcal.get_calendar_names()
     zones = sorted(list(zoneinfo.available_timezones()))
@@ -112,14 +100,11 @@ def show_create_trade_plan_form() -> TradePlan | None:
         options=zones,
         index=zones.index(market_timezone or "America/New_York"),
     )
-    backtest_start_date = st.date_input(
-        "Pick a backtest start date (run backtest from that date to give enough lead time to calculate indicators)",
-        value=datetime.today() - timedelta(days=30),
-    )
-    trade_start_date = st.date_input(
-        "Pick a trade start date (trade signal before that is surpressed)",
-        min_value=datetime.now().date(),
-    )
+    return market_calendar, market_timezone
+
+
+def _get_trade_timing_config():
+    """Get trade timing configuration."""
     c1, c2 = st.columns([1, 3])
     entry_type = c1.selectbox(
         "Select order entry type",
@@ -142,6 +127,69 @@ def show_create_trade_plan_form() -> TradePlan | None:
             )
     except Exception as e:
         st.error(e)
+
+    return entry_type, trade_time_of_day
+
+
+def _validate_and_create_trade_plan(name, trade_time_of_day, initial_holding, **kwargs):
+    """Validate inputs and create TradePlan if valid."""
+    if initial_holding:
+        initial_holding = {
+            k.strip(): int(v)
+            for k, v in [x.strip().split(":") for x in initial_holding.split(",")]
+        }
+
+    if len(name.strip()) == 0:
+        st.error("Trade plan name is required")
+        return None
+    elif not trade_time_of_day:
+        st.error("Trade time of day is required")
+        return None
+    else:
+        return TradePlan(
+            id=MTDB.uniqueid(),
+            name=name,
+            initial_holding=initial_holding,
+            create_time=datetime.utcnow(),
+            update_time=None,
+            **kwargs,
+        )
+
+
+def show_create_trade_plan_form() -> TradePlan | None:
+    # Basic configuration
+    account = st.selectbox(
+        "Select a broker account", BrokerAccount.list(), format_func=lambda b: b.alias
+    )
+    strategy_file = st.selectbox("Pick a strategy", StrategyManager.list())
+    data_source = st.selectbox(
+        "Select a data source",
+        QuoteSource.list() + [None],
+        index=QuoteSource.list().index("Yahoo"),
+        format_func=lambda x: x or "Use Strategy.prepare_data()",
+    )
+    ticker_css = st.text_input(
+        "Define the asset space (a list of tickers separated by comma without space)",
+        placeholder="e.g. AAPL,GOOG",
+    )
+
+    # Market configuration
+    market_calendar, market_timezone = _get_market_config(data_source, ticker_css)
+
+    # Date configuration
+    backtest_start_date = st.date_input(
+        "Pick a backtest start date (run backtest from that date to give enough lead time to calculate indicators)",
+        value=datetime.today() - timedelta(days=30),
+    )
+    trade_start_date = st.date_input(
+        "Pick a trade start date (trade signal before that is surpressed)",
+        min_value=datetime.now().date(),
+    )
+
+    # Trade timing configuration
+    entry_type, trade_time_of_day = _get_trade_timing_config()
+
+    # Financial configuration
     initial_cash = st.number_input("Set the cash amount to invest", value=0)
     initial_holding = (
         st.text_input(
@@ -150,6 +198,8 @@ def show_create_trade_plan_form() -> TradePlan | None:
         )
         or None
     )
+
+    # Plan configuration
     name = st.text_input("Name the trade plan")
     strict = (
         st.radio("Select backtest mode", ["Strict", "Incremental"], index=0) == "Strict"
@@ -166,46 +216,34 @@ def show_create_trade_plan_form() -> TradePlan | None:
         "See [Trading](https://dodid.github.io/minitrade/trading/) for more details."
     )
 
+    # Ticker resolution
     tickers = ticker_resolver(account, ticker_css)
     ticker_map = {k: v["id"] if v is not None else None for k, v in tickers.items()}
     if account and None in ticker_map.values():
         st.warning(
             "Tickers are not fully resolved. You can ignore this warning if unresolved tickers are not traded."
         )
-    dryrun = st.button("Save and dry run")
 
+    dryrun = st.button("Save and dry run")
     if dryrun:
-        if initial_holding:
-            initial_holding = {
-                k.strip(): int(v)
-                for k, v in [x.strip().split(":") for x in initial_holding.split(",")]
-            }
-        if len(name.strip()) == 0:
-            st.error("Trade plan name is required")
-        elif not trade_time_of_day:
-            st.error("Trade time of day is required")
-        else:
-            return TradePlan(
-                id=MTDB.uniqueid(),
-                name=name,
-                strategy_file=strategy_file,
-                ticker_css=ticker_css.replace(" ", ""),
-                market_calendar=market_calendar,
-                market_timezone=market_timezone,
-                data_source=data_source,
-                backtest_start_date=backtest_start_date.strftime("%Y-%m-%d"),
-                trade_start_date=trade_start_date.strftime("%Y-%m-%d"),
-                trade_time_of_day=trade_time_of_day,
-                entry_type=entry_type,
-                broker_account=account.alias if account else None,
-                initial_cash=initial_cash,
-                initial_holding=initial_holding,
-                strict=strict,
-                enabled=False,
-                create_time=datetime.utcnow(),
-                update_time=None,
-                broker_ticker_map=ticker_map,
-            )
+        return _validate_and_create_trade_plan(
+            name=name,
+            trade_time_of_day=trade_time_of_day,
+            initial_holding=initial_holding,
+            strategy_file=strategy_file,
+            ticker_css=ticker_css.replace(" ", ""),
+            market_calendar=market_calendar,
+            market_timezone=market_timezone,
+            data_source=data_source,
+            backtest_start_date=backtest_start_date.strftime("%Y-%m-%d"),
+            trade_start_date=trade_start_date.strftime("%Y-%m-%d"),
+            entry_type=entry_type,
+            broker_account=account.alias if account else None,
+            initial_cash=initial_cash,
+            strict=strict,
+            enabled=False,
+            broker_ticker_map=ticker_map,
+        )
 
 
 def display_run(plan: TradePlan, log: BacktestLog):
@@ -271,7 +309,7 @@ def run_trade_plan_once(plan: TradePlan) -> None:
     if log is not None and not log.error:
         st.success(f"Backtest {log.id} finished successfully")
     else:
-        st.error(f"Backtest failed")
+        st.error("Backtest failed")
 
 
 def confirm_delete_trade_plan(plan: TradePlan) -> None:
@@ -444,7 +482,7 @@ def show_performance(plan, logs, broker, orders):
             st.write(broker_orders)
         else:
             st.write("No stats due to insufficient data")
-    except Exception as e:
+    except Exception:
         st.write("No stats due to insufficient data")
 
 

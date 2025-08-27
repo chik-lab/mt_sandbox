@@ -42,7 +42,7 @@ def run_task_once(plan: TaskPlan) -> None:
     if log is not None and not log.error:
         st.success(f"Run {log.id} finished successfully")
     else:
-        st.error(f"Run failed")
+        st.error("Run failed")
 
 
 def show_task_header_and_controls(plan: TaskPlan):
@@ -161,10 +161,10 @@ def show_run_history(tab, plan: TaskPlan) -> None:
             )
             label = f"{log_status} {log_time} [exit {log.return_value}]"
             with st.expander(label):
-                st.caption(f"Log - stderr")
+                st.caption("Log - stderr")
                 if log.error:
                     st.text(log.stderr)
-                st.caption(f"Log - stdout")
+                st.caption("Log - stdout")
                 if log.stdout:
                     st.text(log.stdout)
 

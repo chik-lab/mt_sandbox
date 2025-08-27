@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any
-from zoneinfo import ZoneInfo
+
 
 import pandas as pd
 import requests
@@ -157,7 +157,7 @@ class InteractiveBrokers(Broker):
             )
             account["performance"] = self.__call_ibgateway(
                 "POST",
-                f"/pa/performance",
+                "/pa/performance",
                 json={"acctIds": [account["id"]], "freq": "D"},
             )
         return accounts

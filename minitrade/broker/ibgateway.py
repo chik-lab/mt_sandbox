@@ -8,15 +8,13 @@ import time
 from collections import namedtuple
 from datetime import datetime
 from typing import Any
-from pathlib import Path
+
 
 import psutil
 import requests
 from fastapi import Depends, FastAPI, HTTPException, Response
 from pydantic import BaseModel
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
+
 
 from minitrade.broker import BrokerAccount
 from minitrade.utils.telegram import send_telegram_message

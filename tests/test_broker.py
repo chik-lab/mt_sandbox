@@ -4,7 +4,17 @@ from zoneinfo import ZoneInfo
 from minitrade.broker.ib import InteractiveBrokersValidator
 from minitrade.utils.mtdb import MTDB
 
-from .fixture import *
+import os
+import pytest
+
+from .fixture import (
+    BrokerAccount,
+    Broker,
+    TradePlan,
+    OrderValidator,
+    RawOrder,
+    BacktestLog,
+)
 
 
 def test_get_broker():
@@ -126,12 +136,12 @@ def test_order_validator():
 def test_manual_broker_works():
     account = BrokerAccount.get_account("pytest_manual_account")
     broker = Broker.get_broker(account=account)
-    assert broker.is_ready() == True
+    assert broker.is_ready()
     try:
         broker.connect()
     except Exception:
-        assert False, f"Broker not connected"
-    assert broker.is_ready() == True
+        assert False, "Broker not connected"
+    assert broker.is_ready()
     try:
         broker.get_account_info()
         broker.get_portfolio()
@@ -271,12 +281,12 @@ def test_ib_broker_works(launch_scheduler, launch_ibgateway):
     # export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
     account = BrokerAccount.get_account("pytest_ib_account")
     broker = Broker.get_broker(account=account)
-    assert broker.is_ready() == False
+    assert not broker.is_ready()
     try:
         broker.connect()
     except Exception:
-        assert False, f"Broker not connected"
-    assert broker.is_ready() == True
+        assert False, "Broker not connected"
+    assert broker.is_ready()
     try:
         broker_ticker_map = broker.resolve_tickers("AAPL,GOOG,META")
         broker_ticker_map = {k: v[0]["id"] for k, v in broker_ticker_map.items()}
