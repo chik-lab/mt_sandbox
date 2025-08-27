@@ -295,7 +295,7 @@ def _maybe_resample_data(
 
     def _weighted_returns(s, trades=trades):
         df = trades.loc[s.index]
-        return ((df["Size"].abs() * df["ReturnPct"]) / df["Size"].abs().sum()).sum()
+        return ((df["Size"].abs() * df["Gross%"]) / df["Size"].abs().sum()).sum()
 
     def _group_trades(column):
         def f(s, new_index=pd.Index(baseline.index.view(int)), bars=trades[column]):
@@ -314,7 +314,7 @@ def _maybe_resample_data(
             .agg(
                 {
                     **TRADES_AGG,
-                    "ReturnPct": _weighted_returns,
+                    "Gross%": _weighted_returns,
                     "count": "sum",
                     "EntryBar": _group_trades("EntryTime"),
                     "ExitBar": _group_trades("ExitTime"),
@@ -574,7 +574,7 @@ def plot(
             exit_price=trades["ExitPrice"],
             ticker=trades["Ticker"],
             size=trades["Size"],
-            returns_positive=(trades["ReturnPct"] > 0).astype(int).astype(str),
+            returns_positive=(trades["Gross%"] > 0).astype(int).astype(str),
         )
     )
 
@@ -846,8 +846,8 @@ return this.labels[index] || "";
                 line_width=1,
             )
         )
-        returns_long = np.where(trades["Size"] > 0, trades["ReturnPct"], np.nan)
-        returns_short = np.where(trades["Size"] < 0, trades["ReturnPct"], np.nan)
+        returns_long = np.where(trades["Size"] > 0, trades["Gross%"], np.nan)
+        returns_short = np.where(trades["Size"] < 0, trades["Gross%"], np.nan)
         size = (trades["Size"] * trades["EntryPrice"]).abs().astype(int)
         size = np.interp(size, (size.min(), size.max()), (4, 12))
         pos_value = (trades["Size"] * trades["EntryPrice"]).abs()
@@ -1483,8 +1483,8 @@ return this.labels[index] || "";
                             exit_time=symbol_trades["ExitTime"],
                             size=symbol_trades["Size"],
                             pnl=symbol_trades["PnL"],
-                            return_pct=symbol_trades["ReturnPct"],
-                            returns_positive=(symbol_trades["ReturnPct"] > 0)
+                            return_pct=symbol_trades["Gross%"],
+                            returns_positive=(symbol_trades["Gross%"] > 0)
                             .astype(int)
                             .astype(str),
                         )

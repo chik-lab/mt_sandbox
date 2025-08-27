@@ -67,7 +67,7 @@ def _prepare_trades_dataframe(trades):
             "EntryPrice": [t.entry_price for t in trades],
             "ExitPrice": [t.exit_price for t in trades],
             "PnL": [t.pl for t in trades],
-            "ReturnPct": [t.pl_pct for t in trades],
+            "Gross%": [t.pl_pct for t in trades],
             "EntryTime": [t.entry_time for t in trades],
             "ExitTime": [t.exit_time for t in trades],
             "Tag": [t.tag for t in trades],
@@ -159,11 +159,15 @@ def _calculate_risk_metrics(
     )
 
     # Sortino Ratio
+    
     with warnings.catch_warnings():
         warnings.filterwarnings("error")
         try:
+            # Calculate daily risk-free rate
+            daily_rf = risk_free_rate / annual_trading_periods
+            # Use risk-free rate as downside threshold
             metrics["Sortino Ratio"] = (annualized_return - risk_free_rate) / (
-                np.sqrt(np.mean(period_returns.clip(-np.inf, 0) ** 2))
+                np.sqrt(np.mean((period_returns - daily_rf).clip(-np.inf, 0) ** 2))
                 * np.sqrt(annual_trading_periods)
             )
         except Warning:
@@ -234,7 +238,7 @@ def compute_stats(
     # Extract key metrics
     pl = trades_df["PnL"]
     pl_net = trades_df["PnLNet"] if "PnLNet" in trades_df.columns else pl
-    returns = trades_df["ReturnPct"]
+    returns = trades_df["Gross%"]
     durations = trades_df["Duration"]
 
     def _round_timedelta(value, _period=_data_period(index)):

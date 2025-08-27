@@ -2329,9 +2329,12 @@ class Backtest:
             period of the `Strategy.I` indicator which lags the most.
             Obviously, this can affect results.
         """
+        # Extract risk_free_rate from kwargs before passing to strategy
+        risk_free_rate = kwargs.pop('risk_free_rate', 0.03)
+        
         data = _Data(self._data.copy(deep=False))
         broker: _Broker = self._broker(data=data)
-        strategy: Strategy = self._strategy(broker, data, kwargs)
+        strategy: Strategy = self._strategy(broker, data, kwargs)  # kwargs no longer contains risk_free_rate
         processed_orders: List[Order] = []
         final_positions = None
 
@@ -2435,7 +2438,7 @@ class Backtest:
                 trades=broker.closed_trades,
                 equity=equity,
                 ohlc_data=self._ohlc_ref_data,
-                risk_free_rate=0.0,
+                risk_free_rate=risk_free_rate,  # Use the extracted value
                 strategy_instance=strategy,
                 positions=final_positions,
                 trade_start_bar=start,
