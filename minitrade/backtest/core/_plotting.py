@@ -110,34 +110,117 @@ def set_output_directory(directory):
 
 def _bokeh_reset(filename=None):
     curstate().reset()
-    print(f"_bokeh_reset called with filename: '{filename}' (type: {type(filename)})")
     if filename and filename != "":  # Allow empty string to disable file output
         if not filename.endswith(".html"):
             filename += ".html"
+        
+        # Remove existing file to prevent "already exists, will be overwritten" warning
+        try:
+            import os
+            if os.path.exists(filename):
+                os.remove(filename)
+        except Exception:
+            pass  # Ignore if we can't remove it
+            
         # Use the filename (strategy name) as the title, but clean it up
         title = filename.replace(".html", "").replace("_", " ")
-        # Get absolute path for better debugging
-        import os
-
-        abs_filename = os.path.abspath(filename)
         output_file(filename, title=title)
-        print(f"HTML file will be saved as: {filename}")
-        print(f"Absolute path: {abs_filename}")
-        print(f"Current working directory: {os.getcwd()}")
-
-        # Check if the directory exists and is writable
-        dir_path = os.path.dirname(abs_filename)
-        if dir_path and not os.path.exists(dir_path):
-            print(f"Warning: Directory {dir_path} does not exist")
-        elif dir_path and not os.access(dir_path, os.W_OK):
-            print(f"Warning: Directory {dir_path} is not writable")
     elif IS_JUPYTER_NOTEBOOK:
         curstate().output_notebook()
-        print("Output will be displayed in Jupyter notebook")
-    else:
-        print("No output file specified - use filename parameter to save HTML file")
 
     return filename
+
+
+def _get_bokeh_browser_arg(open_browser: bool):
+    """Return a browser argument suitable for bokeh.io.show on this platform.
+
+    - When open_browser is False, return "none" to suppress opening a browser.
+    - On WSL, prefer "windows-default" so it opens in the Windows default browser.
+    - Otherwise, return None to let Bokeh use system defaults without forcing a specific browser.
+    """
+    if not open_browser:
+        return "none"
+
+    # Detect WSL environments
+    try:
+        import os
+        import platform
+
+        if os.environ.get("WSL_DISTRO_NAME"):
+            return "windows-default"
+        release = platform.release().lower()
+        if "microsoft" in release:
+            return "windows-default"
+        # Fallback: check /proc/version
+        try:
+            with open("/proc/version", "r", encoding="utf-8") as _v:
+                if "microsoft" in _v.read().lower():
+                    return "windows-default"
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+    return None
+
+
+def _open_html_external(file_path: str) -> None:
+    """Open the given HTML file in a suitable browser, with special handling for WSL.
+
+    This avoids relying on Python's webbrowser in environments where no Linux GUI
+    browser is available (e.g., WSL without X/Wayland).
+    """
+    try:
+        import os
+        import shutil
+        import subprocess
+        import platform
+
+        abs_path = os.path.abspath(file_path)
+
+        # Detect WSL
+        is_wsl = False
+        if os.environ.get("WSL_DISTRO_NAME"):
+            is_wsl = True
+        else:
+            try:
+                with open("/proc/version", "r", encoding="utf-8") as _v:
+                    is_wsl = "microsoft" in _v.read().lower()
+            except Exception:
+                is_wsl = "microsoft" in platform.release().lower()
+
+        if is_wsl:
+            # Prefer wslview if available
+            if shutil.which("wslview"):
+                subprocess.Popen(["wslview", abs_path])
+                return
+
+            # Fallback to Windows PowerShell Start-Process
+            # Convert /mnt/<drive>/path -> <Drive>:\\path
+            win_path = abs_path
+            try:
+                import re as _re
+                m = _re.match(r"^/mnt/([a-zA-Z])/(.*)", abs_path)
+                if m:
+                    drive = m.group(1).upper() + ":"
+                    tail = m.group(2).replace("/", "\\")
+                    win_path = f"{drive}\\{tail}"
+            except Exception:
+                pass
+
+            # Only attempt if the file actually exists
+            if not os.path.exists(abs_path):
+                return
+
+            pwsh = shutil.which("powershell.exe") or "powershell.exe"
+            subprocess.Popen([pwsh, "-NoProfile", "-Command", f"Start-Process \"{win_path}\""])
+            return
+
+        # Non-WSL: use webbrowser
+        import webbrowser
+        webbrowser.open_new_tab("file://" + abs_path)
+    except Exception:
+        pass
 
 
 def colorgen():
@@ -387,17 +470,15 @@ def plot(
     if filename is None or filename == "":
         if IS_JUPYTER_NOTEBOOK:
             filename = ""  # Empty string to disable file output in notebook
-            print("Running in Jupyter notebook - no file output")
         else:
             # Try to construct the expected filename based on the simulation pattern
             # The expected pattern is: /mnt/e/code/algo/output/simulations/YYYYMMDD_HHMMSS_plot.html
-            import os
             import datetime
             import glob
+            import os
 
             # Try to find the simulations directory
             current_dir = os.getcwd()
-            print(f"Current working directory: {current_dir}")
 
             # Look for simulations directory in common locations
             possible_paths = [
@@ -410,7 +491,6 @@ def plot(
             simulations_dir = None
             for path in possible_paths:
                 if os.path.exists(path):
-                    print(f"Found simulations directory: {path}")
                     simulations_dir = path
                     break
 
@@ -421,47 +501,31 @@ def plot(
                     # Sort by modification time to get the most recent
                     result_files.sort(key=os.path.getmtime, reverse=True)
                     most_recent = result_files[0]
-                    print(f"Most recent result file: {most_recent}")
 
                     # Extract timestamp from result filename
                     basename = os.path.basename(most_recent)
                     if basename.endswith("_result.log"):
                         timestamp = basename.replace("_result.log", "")
-                        print(f"Extracted timestamp from result file: {timestamp}")
 
                         # Construct plot filename with same timestamp
                         filename = os.path.join(
                             simulations_dir, f"{timestamp}_plot.html"
                         )
-                        print(f"Auto-constructed filename matching result: {filename}")
                     else:
-                        print("Could not extract timestamp from result filename")
                         filename = ""
                 else:
-                    print("No result files found - using current timestamp")
                     # Fallback to current timestamp
                     now = datetime.datetime.now()
                     timestamp = now.strftime("%Y%m%d_%H%M%S")
                     filename = os.path.join(simulations_dir, f"{timestamp}_plot.html")
-                    print(f"Fallback filename with current timestamp: {filename}")
             else:
-                print("No simulations directory found - plot will not be saved to file")
                 filename = ""
+
+    # Prepare output filename (without initializing Bokeh output yet)
+    if filename and not str(filename).endswith(".html"):
+        processed_filename = f"{filename}.html"
     else:
-        print(f"Using provided filename: {filename}")
-
-    print(f"Final filename before _bokeh_reset: '{filename}'")
-
-    # Store the original filename for later use
-    original_filename = filename
-
-    # Only call _bokeh_reset if we have a valid filename
-    if filename and filename != "":
-        # Get the processed filename (with .html extension if needed)
-        processed_filename = _bokeh_reset(filename)
-    else:
-        processed_filename = ""
-        print("No filename specified - skipping file output")
+        processed_filename = filename or ""
 
     COLORS = [BEAR_COLOR, BULL_COLOR]
     BAR_WIDTH = 0.8
@@ -534,7 +598,6 @@ return this.labels[index] || "";
         """,
         )
 
-    NBSP = "\N{NBSP}" * 4  # noqa: E999
     ohlc_extreme_values = baseline[["High", "Low"]].copy(deep=False)
     ohlc_tooltips = []
 
@@ -1554,39 +1617,35 @@ return this.labels[index] || "";
         merge_tools=True,
         **kwargs,  # type: ignore
     )
-    # Ensure file is saved even when browser is not opened
-    if processed_filename and processed_filename != "":
-        from bokeh.io import save
+    # Persist and/or open depending on configuration
+    if processed_filename:
+        # Set up Bokeh output configuration first
+        _bokeh_reset(processed_filename)
+        
+        # Save to file
         import os
+        from bokeh.io import save
 
         try:
-            # Ensure the directory exists
             dir_path = os.path.dirname(processed_filename)
             if dir_path and not os.path.exists(dir_path):
                 os.makedirs(dir_path, exist_ok=True)
-                print(f"Created directory: {dir_path}")
-
-            # Save the file using the full path
             save(fig, processed_filename)
-            print(f"Chart saved to: {processed_filename}")
-
-            # Verify file was created
-            if os.path.exists(processed_filename):
-                file_size = os.path.getsize(processed_filename)
-                print(
-                    f"File created successfully: {processed_filename} ({file_size} bytes)"
-                )
-                print(f"File location: {os.path.abspath(processed_filename)}")
-            else:
-                print(f"Warning: File {processed_filename} was not created")
-
         except Exception as e:
             print(f"Error saving file: {e}")
-            print(f"Attempted to save to: {processed_filename}")
-            print(f"Current working directory: {os.getcwd()}")
-            print(f"Absolute path attempted: {os.path.abspath(processed_filename)}")
 
-    show(fig, browser=None if open_browser else "none")
+        # Open if requested (avoid Bokeh show double-write)
+        if open_browser:
+            _open_html_external(processed_filename)
+    else:
+        # No filename configured; only open if requested using Bokeh
+        if open_browser:
+            try:
+                # Initialize Bokeh output for an unnamed session
+                _bokeh_reset("")
+                show(fig, browser=_get_bokeh_browser_arg(True))
+            except Exception:
+                pass
     return fig
 
 
@@ -1612,7 +1671,6 @@ def plot_heatmaps(
         processed_filename = _bokeh_reset(filename)
     else:
         processed_filename = ""
-        print("No filename specified for heatmap - skipping file output")
 
     param_combinations = combinations(heatmap.index.names, 2)
     dfs = [
@@ -1672,39 +1730,30 @@ def plot_heatmaps(
         merge_tools=True,
     )
 
-    # Ensure file is saved even when browser is not opened
-    if processed_filename and processed_filename != "":
-        from bokeh.io import save
+    # Persist and/or open depending on configuration
+    if processed_filename:
+        # Save to file
         import os
+        from bokeh.io import save
 
         try:
-            # Ensure the directory exists
             dir_path = os.path.dirname(processed_filename)
             if dir_path and not os.path.exists(dir_path):
                 os.makedirs(dir_path, exist_ok=True)
-                print(f"Created directory: {dir_path}")
-
-            # Save the file
             save(fig, processed_filename)
-            print(f"Heatmap saved to: {processed_filename}")
-
-            # Verify file was created
-            if os.path.exists(processed_filename):
-                file_size = os.path.getsize(processed_filename)
-                print(
-                    f"File created successfully: {processed_filename} ({file_size} bytes)"
-                )
-                print(f"File location: {os.path.abspath(processed_filename)}")
-            else:
-                print(f"Warning: File {processed_filename} was not created")
-
         except Exception as e:
             print(f"Error saving file: {e}")
-            print(f"Attempted to save to: {processed_filename}")
-            print(f"Current working directory: {os.getcwd()}")
-            print(f"Absolute path attempted: {os.path.abspath(processed_filename)}")
-    else:
-        print("No filename specified for heatmap - chart will not be saved to file")
 
-    show(fig, browser=None if open_browser else "none")
+        # Open if requested (avoid Bokeh show double-write)
+        if open_browser:
+            _open_html_external(processed_filename)
+    else:
+        # No filename configured; only open if requested using Bokeh
+        if open_browser:
+            try:
+                # Initialize Bokeh output for an unnamed session
+                _bokeh_reset("")
+                show(fig, browser=_get_bokeh_browser_arg(True))
+            except Exception:
+                pass
     return fig
