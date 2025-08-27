@@ -1358,6 +1358,7 @@ return this.labels[index] || "";
         symbol_figs = []
 
         for symbol in symbols:
+            #TODO - Independent x-range for each symbol now, share x-axis with main chart
             # Extract symbol data
             symbol_data = baseline_multi.loc[:, (symbol, slice(None))]
             symbol_data.columns = symbol_data.columns.get_level_values(1)
