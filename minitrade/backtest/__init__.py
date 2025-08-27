@@ -1,11 +1,11 @@
 from .core import Backtest, Strategy
 from .utils import (
-    generate_random_portfolios,
-    backtest_strategy_parameters,
     backtest_strategy_on_portfolios,
-    plot_heatmap,
+    backtest_strategy_parameters,
     calculate_positions,
     calculate_trade_stats,
+    generate_random_portfolios,
+    plot_heatmap,
     shuffle_ohlcv,
 )
 

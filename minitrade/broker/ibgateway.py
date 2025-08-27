@@ -2,19 +2,17 @@ import asyncio
 import logging
 import os
 import signal
-import urllib3
 import subprocess
 import time
 from collections import namedtuple
 from datetime import datetime
 from typing import Any
 
-
 import psutil
 import requests
+import urllib3
 from fastapi import Depends, FastAPI, HTTPException, Response
 from pydantic import BaseModel
-
 
 from minitrade.broker import BrokerAccount
 from minitrade.utils.telegram import send_telegram_message
@@ -42,6 +40,7 @@ app = FastAPI(title="IB gateway admin")
 
 def ib_start():
     import uvicorn
+
     from minitrade.utils.config import config
 
     try:

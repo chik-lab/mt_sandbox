@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 import yfinance as yf
+
 from minitrade.datasource import QuoteSource
 from minitrade.utils.config import config
 

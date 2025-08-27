@@ -5,8 +5,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
-import pandas as pd
+
 import exchange_calendars as mcal
+import pandas as pd
 
 __all__ = [
     "QuoteSource",

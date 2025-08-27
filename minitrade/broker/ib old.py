@@ -8,7 +8,6 @@ from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any
 
-
 import pandas as pd
 import requests
 

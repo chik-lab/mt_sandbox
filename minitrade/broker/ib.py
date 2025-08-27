@@ -11,8 +11,9 @@ from typing import TYPE_CHECKING, Any
 import pandas as pd
 import requests
 import urllib3
+
 from minitrade.broker import Broker, BrokerAccount, OrderValidator
-from minitrade.broker.ibgateway import login_ibgateway, GatewayInstance
+from minitrade.broker.ibgateway import GatewayInstance, login_ibgateway
 from minitrade.trader import TradePlan
 from minitrade.utils.config import config
 from minitrade.utils.mtdb import MTDB

@@ -5,13 +5,17 @@ from datetime import datetime, time, timedelta
 import pandas as pd
 import pandas_market_calendars as mcal
 import streamlit as st
-
 from tabulate import tabulate
 
 from minitrade.backtest import calculate_trade_stats
 from minitrade.broker import Broker, BrokerAccount
 from minitrade.datasource import QuoteSource
-from minitrade.trader import BacktestLog, BacktestRunner, StrategyManager, TradePlan
+from minitrade.trader import (
+    BacktestLog,
+    BacktestRunner,
+    StrategyManager,
+    TradePlan,
+)
 from minitrade.trader.scheduler import run_trader_after_backtest
 from minitrade.utils.mtdb import MTDB
 

@@ -8,20 +8,20 @@ from pathlib import Path
 import pytest
 
 from minitrade.backtest import Backtest, Strategy
-from minitrade.broker import BrokerAccount, Broker, OrderValidator
+from minitrade.broker import Broker, BrokerAccount, OrderValidator
 from minitrade.datasource import QuoteSource
 from minitrade.trader import (
-    TradePlan,
-    StrategyManager,
-    RawOrder,
     BacktestLog,
     BacktestRunner,
-    TraderLog,
-    Trader,
+    RawOrder,
+    StrategyManager,
+    TaskLog,
     TaskManager,
     TaskPlan,
-    TaskLog,
     TaskRunner,
+    TradePlan,
+    Trader,
+    TraderLog,
 )
 
 # Re-export for test modules

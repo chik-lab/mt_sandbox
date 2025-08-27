@@ -1,6 +1,6 @@
 import os
 
-from .fixture import StrategyManager, Strategy
+from .fixture import Strategy, StrategyManager
 
 
 def test_strategy_manager(clean_strategy):
