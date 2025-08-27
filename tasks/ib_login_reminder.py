@@ -13,14 +13,20 @@ EXCLUDED_ACCOUNT_ALIASES = []
 
 
 def check_login_status():
-    ib_accounts = [account for account in BrokerAccount.list() if account.broker == 'IB']
-    brokers = [Broker.get_broker(account) for account in ib_accounts if account.alias not in EXCLUDED_ACCOUNT_ALIASES]
+    ib_accounts = [
+        account for account in BrokerAccount.list() if account.broker == "IB"
+    ]
+    brokers = [
+        Broker.get_broker(account)
+        for account in ib_accounts
+        if account.alias not in EXCLUDED_ACCOUNT_ALIASES
+    ]
     status = {broker.account.alias: broker.is_ready() for broker in brokers}
     not_ready = [alias for alias, ready in status.items() if not ready]
     if not_ready:
-        print(f'{not_ready} is not logged in.', file=sys.stderr)
+        print(f"{not_ready} is not logged in.", file=sys.stderr)
         sys.exit(1)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     check_login_status()

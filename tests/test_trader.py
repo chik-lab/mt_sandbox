@@ -11,23 +11,23 @@ from .fixture import *
 def test_invalid_plan(clean_db, create_strategies, launch_scheduler):
     plan = TradePlan(
         id=MTDB.uniqueid(),
-        name='pytest_run_backtest',
-        strategy_file='invalid_strategy.py',
-        ticker_css='AAPL,GOOG,META',
-        market_calendar='NASDAQ',
-        market_timezone='America/New_York',
-        data_source='Yahoo',
-        backtest_start_date='2023-01-01',
-        trade_start_date='2023-01-01',
-        trade_time_of_day='20:30:00',
-        entry_type='TOO',
-        broker_account='Manual',
+        name="pytest_run_backtest",
+        strategy_file="invalid_strategy.py",
+        ticker_css="AAPL,GOOG,META",
+        market_calendar="NASDAQ",
+        market_timezone="America/New_York",
+        data_source="Yahoo",
+        backtest_start_date="2023-01-01",
+        trade_start_date="2023-01-01",
+        trade_time_of_day="20:30:00",
+        entry_type="TOO",
+        broker_account="Manual",
         initial_cash=10000,
         enabled=True,
         strict=False,
         create_time=datetime.utcnow(),
         update_time=None,
-        broker_ticker_map={'AAPL': 'AAPL', 'GOOG': 'GOOG', 'META': 'META'}
+        broker_ticker_map={"AAPL": "AAPL", "GOOG": "GOOG", "META": "META"},
     )
     plan.save()
     runner = BacktestRunner(plan)
@@ -40,23 +40,23 @@ def test_invalid_plan(clean_db, create_strategies, launch_scheduler):
 def test_run_backtest_strict(clean_db, create_strategies, launch_scheduler):
     plan = TradePlan(
         id=MTDB.uniqueid(),
-        name='pytest_run_backtest',
-        strategy_file='rotate_buying.py',
-        ticker_css='AAPL,GOOG,META',
-        market_calendar='NASDAQ',
-        market_timezone='America/New_York',
-        data_source='Yahoo',
-        backtest_start_date='2023-01-01',
-        trade_start_date='2023-01-01',
-        trade_time_of_day='20:30:00',
-        entry_type='TRG',
-        broker_account='Manual',
+        name="pytest_run_backtest",
+        strategy_file="rotate_buying.py",
+        ticker_css="AAPL,GOOG,META",
+        market_calendar="NASDAQ",
+        market_timezone="America/New_York",
+        data_source="Yahoo",
+        backtest_start_date="2023-01-01",
+        trade_start_date="2023-01-01",
+        trade_time_of_day="20:30:00",
+        entry_type="TRG",
+        broker_account="Manual",
         initial_cash=10000,
         enabled=True,
         strict=True,
         create_time=datetime.utcnow(),
         update_time=None,
-        broker_ticker_map={'AAPL': 'AAPL', 'GOOG': 'GOOG', 'META': 'META'}
+        broker_ticker_map={"AAPL": "AAPL", "GOOG": "GOOG", "META": "META"},
     )
     plan.save()
 
@@ -94,23 +94,23 @@ def test_run_backtest_strict(clean_db, create_strategies, launch_scheduler):
 def test_run_backtest_incremental(clean_db, create_strategies, launch_scheduler):
     plan = TradePlan(
         id=MTDB.uniqueid(),
-        name='pytest_run_backtest',
-        strategy_file='rotate_buying.py',
-        ticker_css='AAPL,GOOG,META',
-        market_calendar='NASDAQ',
-        market_timezone='America/New_York',
-        data_source='Yahoo',
-        backtest_start_date='2023-01-01',
-        trade_start_date='2023-01-01',
-        trade_time_of_day='20:30:00',
-        entry_type='TRG',
-        broker_account='Manual',
+        name="pytest_run_backtest",
+        strategy_file="rotate_buying.py",
+        ticker_css="AAPL,GOOG,META",
+        market_calendar="NASDAQ",
+        market_timezone="America/New_York",
+        data_source="Yahoo",
+        backtest_start_date="2023-01-01",
+        trade_start_date="2023-01-01",
+        trade_time_of_day="20:30:00",
+        entry_type="TRG",
+        broker_account="Manual",
         initial_cash=10000,
         enabled=True,
         strict=False,
         create_time=datetime.utcnow(),
         update_time=None,
-        broker_ticker_map={'AAPL': 'AAPL', 'GOOG': 'GOOG', 'META': 'META'}
+        broker_ticker_map={"AAPL": "AAPL", "GOOG": "GOOG", "META": "META"},
     )
     plan.save()
 
@@ -145,23 +145,23 @@ def test_run_backtest_incremental(clean_db, create_strategies, launch_scheduler)
 def test_backtest_storage(clean_db, create_strategies, launch_scheduler):
     plan = TradePlan(
         id=MTDB.uniqueid(),
-        name='pytest_run_backtest',
-        strategy_file='storage_test.py',
-        ticker_css='AAPL,GOOG,META',
-        market_calendar='NASDAQ',
-        market_timezone='America/New_York',
-        data_source='Yahoo',
-        backtest_start_date='2023-01-01',
-        trade_start_date='2023-01-01',
-        trade_time_of_day='20:30:00',
-        entry_type='TRG',
-        broker_account='Manual',
+        name="pytest_run_backtest",
+        strategy_file="storage_test.py",
+        ticker_css="AAPL,GOOG,META",
+        market_calendar="NASDAQ",
+        market_timezone="America/New_York",
+        data_source="Yahoo",
+        backtest_start_date="2023-01-01",
+        trade_start_date="2023-01-01",
+        trade_time_of_day="20:30:00",
+        entry_type="TRG",
+        broker_account="Manual",
         initial_cash=10000,
         enabled=True,
         strict=False,
         create_time=datetime.utcnow(),
         update_time=None,
-        broker_ticker_map={'AAPL': 'AAPL', 'GOOG': 'GOOG', 'META': 'META'}
+        broker_ticker_map={"AAPL": "AAPL", "GOOG": "GOOG", "META": "META"},
     )
     plan.save()
 
@@ -170,27 +170,30 @@ def test_backtest_storage(clean_db, create_strategies, launch_scheduler):
     assert len(plan.storage) == 0
 
     # Dryrun mode doesn't change storage
-    assert BacktestRunner(TradePlan.get_plan(plan.name)).run_backtest(dryrun=True) is not None
+    assert (
+        BacktestRunner(TradePlan.get_plan(plan.name)).run_backtest(dryrun=True)
+        is not None
+    )
     assert len(TradePlan.get_plan(plan.name).storage) == 0
 
     # Storage is initialized correctly
     assert BacktestRunner(TradePlan.get_plan(plan.name)).run_backtest() is not None
     storage = TradePlan.get_plan(plan.name).storage
-    assert storage['int'] == 0
-    assert storage['float'] == 0.0
-    assert storage['str'] == '0'
-    assert storage['list'] == [0]
-    assert storage['dict'] == {'int': 0}
-    assert np.array_equal(storage['np'], np.array([0]))
-    assert storage['pd'].equals(pd.DataFrame({'int': [0]}))
+    assert storage["int"] == 0
+    assert storage["float"] == 0.0
+    assert storage["str"] == "0"
+    assert storage["list"] == [0]
+    assert storage["dict"] == {"int": 0}
+    assert np.array_equal(storage["np"], np.array([0]))
+    assert storage["pd"].equals(pd.DataFrame({"int": [0]}))
 
     # Storage is updated correctly
     assert BacktestRunner(TradePlan.get_plan(plan.name)).run_backtest() is not None
     storage = TradePlan.get_plan(plan.name).storage
-    assert storage['int'] == 1
-    assert storage['float'] == 1.0
-    assert storage['str'] == '1'
-    assert storage['list'] == [1]
-    assert storage['dict'] == {'int': 1}
-    assert np.array_equal(storage['np'], np.array([1]))
-    assert storage['pd'].equals(pd.DataFrame({'int': [1]}))
+    assert storage["int"] == 1
+    assert storage["float"] == 1.0
+    assert storage["str"] == "1"
+    assert storage["list"] == [1]
+    assert storage["dict"] == {"int": 1}
+    assert np.array_equal(storage["np"], np.array([1]))
+    assert storage["pd"].equals(pd.DataFrame({"int": [1]}))

@@ -1,4 +1,3 @@
-
 from datetime import datetime, timedelta, timezone
 from io import StringIO
 from unittest.mock import patch
@@ -22,153 +21,186 @@ class MockQuoteSource(QuoteSource):
         pass
 
     def _ticker_timezone(self, ticker: str) -> str:
-        return 'America/New_York'
+        return "America/New_York"
 
     def _ticker_calendar(self, ticker: str) -> str:
-        return 'NYSE'
+        return "NYSE"
 
     def _spot(self, tickers: list[str]) -> pd.Series:
         return pd.Series([100.0, 200.0], index=tickers)
 
     def _daily_bar(self, ticker: str, start: str, end: str) -> pd.DataFrame:
-        start = '2022-01-02' if ticker == 'AAPL' else start
+        start = "2022-01-02" if ticker == "AAPL" else start
         dates = pd.date_range(start=start, end=end)
         data = {
-            'Open': [100.0] * len(dates),
-            'High': [110.0] * len(dates),
-            'Low': [90.0] * len(dates),
-            'Close': [105.0] * len(dates),
-            'Volume': [1000] * len(dates),
+            "Open": [100.0] * len(dates),
+            "High": [110.0] * len(dates),
+            "Low": [90.0] * len(dates),
+            "Close": [105.0] * len(dates),
+            "Volume": [1000] * len(dates),
         }
         return pd.DataFrame(data, index=dates).sample(frac=1)
 
-    def _minute_bar(self, ticker: str, start: str, end: str, interval: int) -> pd.DataFrame:
-        start = '2022-01-02' if ticker == 'AAPL' else start
-        dates = pd.date_range(start=start, end=end, freq=f'{interval}min')
+    def _minute_bar(
+        self, ticker: str, start: str, end: str, interval: int
+    ) -> pd.DataFrame:
+        start = "2022-01-02" if ticker == "AAPL" else start
+        dates = pd.date_range(start=start, end=end, freq=f"{interval}min")
         data = {
-            'Open': [100.0] * len(dates),
-            'High': [110.0] * len(dates),
-            'Low': [90.0] * len(dates),
-            'Close': [105.0] * len(dates),
-            'Volume': [1000] * len(dates),
+            "Open": [100.0] * len(dates),
+            "High": [110.0] * len(dates),
+            "Low": [90.0] * len(dates),
+            "Close": [105.0] * len(dates),
+            "Volume": [1000] * len(dates),
         }
         return pd.DataFrame(data, index=dates).sample(frac=1)
 
 
 class TestQuoteSource:
-    @pytest.fixture(scope='module')
+    @pytest.fixture(scope="module")
     def quote_source(self):
         return MockQuoteSource()
 
     def test_ticker_timezone(self, quote_source):
-        assert quote_source.ticker_timezone('AAPL') == 'America/New_York'
+        assert quote_source.ticker_timezone("AAPL") == "America/New_York"
 
     def test_ticker_calendar(self, quote_source):
-        assert quote_source.ticker_calendar('AAPL') == 'NYSE'
+        assert quote_source.ticker_calendar("AAPL") == "NYSE"
 
     def test_spot(self, quote_source):
-        expected = pd.Series([100.0, 200.0], index=['AAPL', 'GOOGL'])
-        assert_series_equal(quote_source.spot(['AAPL', 'GOOGL']), expected)
-        assert_series_equal(quote_source.spot('AAPL,GOOGL'), expected)
+        expected = pd.Series([100.0, 200.0], index=["AAPL", "GOOGL"])
+        assert_series_equal(quote_source.spot(["AAPL", "GOOGL"]), expected)
+        assert_series_equal(quote_source.spot("AAPL,GOOGL"), expected)
 
     def test_daily_bar(self, quote_source):
-        expected_index = pd.date_range(start='2022-01-02', end='2022-01-05')
+        expected_index = pd.date_range(start="2022-01-02", end="2022-01-05")
         expected_data = {
-            'Open': [100.0] * len(expected_index),
-            'High': [110.0] * len(expected_index),
-            'Low': [90.0] * len(expected_index),
-            'Close': [105.0] * len(expected_index),
-            'Volume': [1000] * len(expected_index),
+            "Open": [100.0] * len(expected_index),
+            "High": [110.0] * len(expected_index),
+            "Low": [90.0] * len(expected_index),
+            "Close": [105.0] * len(expected_index),
+            "Volume": [1000] * len(expected_index),
         }
         single = pd.DataFrame(expected_data, index=expected_index)
-        expected = pd.concat([single]*2, axis=1, keys=['AAPL', 'GOOGL'])
+        expected = pd.concat([single] * 2, axis=1, keys=["AAPL", "GOOGL"])
         assert_frame_equal(
-            quote_source.daily_bar(['AAPL', 'GOOGL'], start='2022-01-01', end='2022-01-05'),
-            expected, check_freq=False, check_dtype=False)
-        assert_frame_equal(quote_source.daily_bar('AAPL,GOOGL', start='2022-01-01',
-                           end='2022-01-05'), expected, check_freq=False, check_dtype=False)
+            quote_source.daily_bar(
+                ["AAPL", "GOOGL"], start="2022-01-01", end="2022-01-05"
+            ),
+            expected,
+            check_freq=False,
+            check_dtype=False,
+        )
+        assert_frame_equal(
+            quote_source.daily_bar("AAPL,GOOGL", start="2022-01-01", end="2022-01-05"),
+            expected,
+            check_freq=False,
+            check_dtype=False,
+        )
 
     def test_daily_bar2(self, quote_source):
-        expected_index = pd.date_range(start='2022-01-02', end='2022-01-05')
+        expected_index = pd.date_range(start="2022-01-02", end="2022-01-05")
         expected_data = {
-            'Open': [100.0 / 105] * len(expected_index),
-            'High': [110.0 / 105] * len(expected_index),
-            'Low': [90.0 / 105] * len(expected_index),
-            'Close': [105.0 / 105] * len(expected_index),
-            'Volume': [1000] * len(expected_index),
+            "Open": [100.0 / 105] * len(expected_index),
+            "High": [110.0 / 105] * len(expected_index),
+            "Low": [90.0 / 105] * len(expected_index),
+            "Close": [105.0 / 105] * len(expected_index),
+            "Volume": [1000] * len(expected_index),
         }
         single = pd.DataFrame(expected_data, index=expected_index)
-        expected = pd.concat([single]*2, axis=1, keys=['AAPL', 'GOOGL'])
-        assert_frame_equal(quote_source.daily_bar(
-            ['AAPL', 'GOOGL'],
-            start='2022-01-01', end='2022-01-05', normalize=True),
-            expected, check_freq=False, check_dtype=False)
+        expected = pd.concat([single] * 2, axis=1, keys=["AAPL", "GOOGL"])
+        assert_frame_equal(
+            quote_source.daily_bar(
+                ["AAPL", "GOOGL"], start="2022-01-01", end="2022-01-05", normalize=True
+            ),
+            expected,
+            check_freq=False,
+            check_dtype=False,
+        )
 
     def test_minute_bar(self, quote_source):
-        expected_index = pd.date_range(start='2022-01-01', end='2022-01-03', freq='1min')
+        expected_index = pd.date_range(
+            start="2022-01-01", end="2022-01-03", freq="1min"
+        )
         expected_data = {
-            'Open': [100.0] * len(expected_index),
-            'High': [110.0] * len(expected_index),
-            'Low': [90.0] * len(expected_index),
-            'Close': [105.0] * len(expected_index),
-            'Volume': [1000] * len(expected_index),
+            "Open": [100.0] * len(expected_index),
+            "High": [110.0] * len(expected_index),
+            "Low": [90.0] * len(expected_index),
+            "Close": [105.0] * len(expected_index),
+            "Volume": [1000] * len(expected_index),
         }
         long = pd.DataFrame(expected_data, index=expected_index)
-        short = long.loc[long.index >= '2022-01-02']
-        expected = pd.concat([short, long], axis=1, keys=['AAPL', 'GOOGL']).sort_index()
+        short = long.loc[long.index >= "2022-01-02"]
+        expected = pd.concat([short, long], axis=1, keys=["AAPL", "GOOGL"]).sort_index()
         assert_frame_equal(
             quote_source.minute_bar(
-                ['AAPL', 'GOOGL'],
-                start='2022-01-01', end='2022-01-03', interval=1),
-            expected, check_freq=False, check_dtype=False)
+                ["AAPL", "GOOGL"], start="2022-01-01", end="2022-01-03", interval=1
+            ),
+            expected,
+            check_freq=False,
+            check_dtype=False,
+        )
         assert_frame_equal(
             quote_source.minute_bar(
-                'AAPL,GOOGL',
-                start='2022-01-01', end='2022-01-03', interval=1),
-            expected, check_freq=False, check_dtype=False)
+                "AAPL,GOOGL", start="2022-01-01", end="2022-01-03", interval=1
+            ),
+            expected,
+            check_freq=False,
+            check_dtype=False,
+        )
 
 
 class TestYahooQuoteSource:
-    @pytest.fixture(scope='module')
+    @pytest.fixture(scope="module")
     def quote_source(self):
         return YahooQuoteSource()
 
     def test_format_ticker(self, quote_source):
-        ticker = 'AAPL'
+        ticker = "AAPL"
         assert quote_source._format_ticker(ticker) == ticker
 
     def test_ticker_timezone(self, quote_source):
-        ticker = 'AAPL'
+        ticker = "AAPL"
         timezone = quote_source._ticker_timezone(ticker)
         assert isinstance(timezone, str)
 
-        ticker = 'UNKNOWN'
+        ticker = "UNKNOWN"
         with pytest.raises(KeyError):
             quote_source._ticker_timezone(ticker)
 
     def test_ticker_calendar(self, quote_source):
-        ticker = 'AAPL'
+        ticker = "AAPL"
         calendar = quote_source._ticker_calendar(ticker)
         assert isinstance(calendar, str)
 
     def test_daily_bar(self, quote_source):
-        ticker = 'AAPL'
-        start = '2022-01-01'
-        end = '2022-01-10'
-        for ticker in ['AAPL', 'BRK-B', '^GSPC', 'ES=F', '^TNX', 'JPY=X', '0700.HK', '000001.SS', 'BTC-USD']:
+        ticker = "AAPL"
+        start = "2022-01-01"
+        end = "2022-01-10"
+        for ticker in [
+            "AAPL",
+            "BRK-B",
+            "^GSPC",
+            "ES=F",
+            "^TNX",
+            "JPY=X",
+            "0700.HK",
+            "000001.SS",
+            "BTC-USD",
+        ]:
             df = quote_source._daily_bar(ticker, start, end)
             assert not df.empty
-            assert df.columns.to_list() == ['Open', 'High', 'Low', 'Close', 'Volume']
+            assert df.columns.to_list() == ["Open", "High", "Low", "Close", "Volume"]
             assert isinstance(df.index, pd.DatetimeIndex)
             assert df.index[0].tzinfo is None
-            if ticker == 'AAPL':
-                assert df.index[0].strftime('%Y-%m-%d') == '2022-01-03'
-            assert df.index[-1].strftime('%Y-%m-%d') == end
+            if ticker == "AAPL":
+                assert df.index[0].strftime("%Y-%m-%d") == "2022-01-03"
+            assert df.index[-1].strftime("%Y-%m-%d") == end
             assert df.notna().all(axis=None) == True
 
     def test_minute_bar(self, quote_source):
-        ticker = 'AAPL'
-        start = (datetime.now(timezone.utc) - timedelta(days=10)).strftime('%Y-%m-%d')
+        ticker = "AAPL"
+        start = (datetime.now(timezone.utc) - timedelta(days=10)).strftime("%Y-%m-%d")
         end = None
         interval = 5
         df = quote_source._minute_bar(ticker, start, end, interval)
@@ -176,44 +208,44 @@ class TestYahooQuoteSource:
         assert df.index[0].tzinfo == timezone.utc
 
     def test_spot(self, quote_source):
-        tickers = ['AAPL', 'MSFT']
+        tickers = ["AAPL", "MSFT"]
         df = quote_source._spot(tickers)
         assert not df.empty
         assert isinstance(df.iloc[0], float)
         assert df.name.tzinfo == timezone.utc
 
     def test_invalid_interval(self, quote_source):
-        ticker = 'AAPL'
-        start = '2022-01-01'
-        end = '2022-01-10'
+        ticker = "AAPL"
+        start = "2022-01-01"
+        end = "2022-01-10"
         interval = 7
         with pytest.raises(ValueError):
             quote_source._minute_bar(ticker, start, end, interval)
 
     def test_unknown_exchange(self, quote_source):
-        ticker = 'UNKNOWN'
-        with patch('minitrade.datasource.yahoo.yf.Ticker') as mock_ticker:
-            mock_ticker().fast_info = {'exchange': 'XXX'}
+        ticker = "UNKNOWN"
+        with patch("minitrade.datasource.yahoo.yf.Ticker") as mock_ticker:
+            mock_ticker().fast_info = {"exchange": "XXX"}
             with pytest.warns(UserWarning):
                 calendar = quote_source._ticker_calendar(ticker)
-            assert calendar == 'NYSE'
+            assert calendar == "NYSE"
             mock_ticker.assert_called_with(ticker)
 
     def test_today(self, quote_source):
-        ticker = 'AAPL'
+        ticker = "AAPL"
         today = quote_source.today(ticker)
         assert isinstance(today, datetime)
-        assert today.tzinfo == ZoneInfo(key='America/New_York')
+        assert today.tzinfo == ZoneInfo(key="America/New_York")
 
     def test_is_trading_now(self, quote_source):
-        ticker = 'AAPL'
+        ticker = "AAPL"
         is_trading = quote_source.is_trading_now(ticker)
         assert isinstance(is_trading, bool)
 
 
 class TestCboeFuturesQuoteSource:
 
-    raw = '''
+    raw = """
 date	Open	High	Low	Close	Volume	expire_date
 2023-12-12	1.00	1.00	1.00	1.00	1000	2023-12-20
 2023-12-12	2.00	2.00	2.00	2.00	2000	2024-01-17
@@ -275,9 +307,9 @@ date	Open	High	Low	Close	Volume	expire_date
 2024-01-24	6.00	6.00	6.00	6.00	6000	2024-03-20
 2024-01-25	5.00	5.00	5.00	5.00	5000	2024-02-14
 2024-01-25	6.00	6.00	6.00	6.00	6000	2024-03-20
-'''
+"""
 
-    term_df = '''
+    term_df = """
 Month,M0,M0,M0,M0,M0,M0,M1,M1,M1,M1,M1,M1
 ,Open,High,Low,Close,Volume,expire_date,Open,High,Low,Close,Volume,expire_date
 date,,,,,,,,,,,,
@@ -311,9 +343,9 @@ date,,,,,,,,,,,,
 2024-01-23,5.00,5.00,5.00,5.00,5000,2024-02-14,6.00,6.00,6.00,6.00,6000,2024-03-20
 2024-01-24,5.00,5.00,5.00,5.00,5000,2024-02-14,6.00,6.00,6.00,6.00,6000,2024-03-20
 2024-01-25,5.00,5.00,5.00,5.00,5000,2024-02-14,6.00,6.00,6.00,6.00,6000,2024-03-20
-'''
+"""
 
-    p1 = '''
+    p1 = """
 date,Open,High,Low,Close,Volume,expire_date
 2023-12-12,2.6666666667,2.6666666667,2.6666666667,2.6666666667,1000,2023-12-20
 2023-12-13,2.6666666667,2.6666666667,2.6666666667,2.6666666667,1000,2023-12-20
@@ -345,9 +377,9 @@ date,Open,High,Low,Close,Volume,expire_date
 2024-01-23,5.00,5.00,5.00,5.00,5000,2024-02-14
 2024-01-24,5.00,5.00,5.00,5.00,5000,2024-02-14
 2024-01-25,5.00,5.00,5.00,5.00,5000,2024-02-14
-'''
+"""
 
-    p4 = '''
+    p4 = """
 date	Open	High	Low	Close	Volume	expire_date
 2023-12-12	2.6666666667	2.6666666667	2.6666666667	2.6666666667	1000	2023-12-20
 2023-12-13	2.6666666667	2.6666666667	2.6666666667	2.6666666667	1000	2023-12-20
@@ -379,9 +411,9 @@ date	Open	High	Low	Close	Volume	expire_date
 2024-01-23	5.00	5.00	5.00	5.00	5000	2024-02-14
 2024-01-24	5.00	5.00	5.00	5.00	5000	2024-02-14
 2024-01-25	5.00	5.00	5.00	5.00	5000	2024-02-14
-'''
+"""
 
-    b1 = '''
+    b1 = """
 date	Open	High	Low	Close	Volume	expire_date
 2023-12-12	3.00	3.00	3.00	3.00	1000	2023-12-20
 2023-12-13	3.00	3.00	3.00	3.00	1000	2023-12-20
@@ -413,9 +445,9 @@ date	Open	High	Low	Close	Volume	expire_date
 2024-01-23	5.00	5.00	5.00	5.00	5000	2024-02-14
 2024-01-24	5.00	5.00	5.00	5.00	5000	2024-02-14
 2024-01-25	5.00	5.00	5.00	5.00	5000	2024-02-14
-'''
+"""
 
-    b4 = '''
+    b4 = """
 date	Open	High	Low	Close	Volume	expire_date
 2023-12-12	3.00	3.00	3.00	3.00	1000	2023-12-20
 2023-12-13	3.00	3.00	3.00	3.00	1000	2023-12-20
@@ -447,7 +479,7 @@ date	Open	High	Low	Close	Volume	expire_date
 2024-01-23	5.00	5.00	5.00	5.00	5000	2024-02-14
 2024-01-24	5.00	5.00	5.00	5.00	5000	2024-02-14
 2024-01-25	5.00	5.00	5.00	5.00	5000	2024-02-14
-'''
+"""
 
     @pytest.fixture
     def quote_source(self):
@@ -461,36 +493,55 @@ date	Open	High	Low	Close	Volume	expire_date
 
     def test__futures_term_structure(self, quote_source):
         # Test case 1: Test futures term structure calculation
-        df = pd.read_csv(StringIO(self.raw), sep='\t', index_col=None)
+        df = pd.read_csv(StringIO(self.raw), sep="\t", index_col=None)
         expected = pd.read_csv(StringIO(self.term_df), header=[0, 1], index_col=0)
         assert_frame_equal(quote_source._futures_term_structure(df), expected)
 
-    def test__continuous_front_month_futures(self, quote_source: CboeFuturesQuoteSource):
+    def test__continuous_front_month_futures(
+        self, quote_source: CboeFuturesQuoteSource
+    ):
         # Test case 1: Test continuous near-month futures calculation with proportional adjustment
-        df = pd.read_csv(StringIO(self.raw), sep='\t', index_col=None)
+        df = pd.read_csv(StringIO(self.raw), sep="\t", index_col=None)
         expected = pd.read_csv(StringIO(self.p1), index_col=0)
-        assert_frame_equal(quote_source._continuous_front_month_futures(
-            df, roll_day=-1, cf_method='proportional'), expected)
+        assert_frame_equal(
+            quote_source._continuous_front_month_futures(
+                df, roll_day=-1, cf_method="proportional"
+            ),
+            expected,
+        )
 
         # Test case 2: Test continuous near-month futures calculation with proportional adjustment
-        expected = pd.read_csv(StringIO(self.p4), sep='\t', index_col=0)
-        assert_frame_equal(quote_source._continuous_front_month_futures(
-            df, roll_day=-4, cf_method='proportional'), expected)
+        expected = pd.read_csv(StringIO(self.p4), sep="\t", index_col=0)
+        assert_frame_equal(
+            quote_source._continuous_front_month_futures(
+                df, roll_day=-4, cf_method="proportional"
+            ),
+            expected,
+        )
 
         # Test case 3: Test continuous near-month futures calculation with no adjustment
-        expected = pd.read_csv(StringIO(self.term_df), header=[0, 1], index_col=0)['M0']
-        assert_frame_equal(quote_source._continuous_front_month_futures(
-            df, cf_method=None), expected)
+        expected = pd.read_csv(StringIO(self.term_df), header=[0, 1], index_col=0)["M0"]
+        assert_frame_equal(
+            quote_source._continuous_front_month_futures(df, cf_method=None), expected
+        )
 
         # Test case 4: Test continuous near-month futures calculation with backward adjustment
-        expected = pd.read_csv(StringIO(self.b1), sep='\t', index_col=0)
-        assert_frame_equal(quote_source._continuous_front_month_futures(
-            df, roll_day=-1, cf_method='backward'), expected)
+        expected = pd.read_csv(StringIO(self.b1), sep="\t", index_col=0)
+        assert_frame_equal(
+            quote_source._continuous_front_month_futures(
+                df, roll_day=-1, cf_method="backward"
+            ),
+            expected,
+        )
 
         # Test case 5: Test continuous near-month futures calculation with backward adjustment
-        expected = pd.read_csv(StringIO(self.b4), sep='\t', index_col=0)
-        assert_frame_equal(quote_source._continuous_front_month_futures(
-            df, roll_day=-4, cf_method='backward'), expected)
+        expected = pd.read_csv(StringIO(self.b4), sep="\t", index_col=0)
+        assert_frame_equal(
+            quote_source._continuous_front_month_futures(
+                df, roll_day=-4, cf_method="backward"
+            ),
+            expected,
+        )
 
     def test__format_ticker(self, quote_source):
         # Test case 1: Test formatting a valid ticker with year and month
@@ -554,35 +605,49 @@ date	Open	High	Low	Close	Volume	expire_date
     def test__daily_bar(self, quote_source):
         # Test case 1: Test getting daily bar data for a specific ticker and date range
         ticker = "VX"
-        start = '2022-01-01'
-        end = '2022-01-31'
+        start = "2022-01-01"
+        end = "2022-01-31"
         df = quote_source._daily_bar(ticker, start, end)
         assert isinstance(df, pd.DataFrame)
-        assert df.columns.to_list() == ['Open', 'High', 'Low', 'Close', 'Volume', 'expire_date']
+        assert df.columns.to_list() == [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume",
+            "expire_date",
+        ]
         assert isinstance(df.index, pd.DatetimeIndex)
-        assert df.index[0].strftime('%Y-%m-%d') == '2022-01-03'
-        assert df.index[-1].strftime('%Y-%m-%d') == end
+        assert df.index[0].strftime("%Y-%m-%d") == "2022-01-03"
+        assert df.index[-1].strftime("%Y-%m-%d") == end
         assert df.index.duplicated().sum() == 0
         assert df.notna().all(axis=None) == True
 
         # Test case 2: Test getting daily bar data for a specific ticker and date range
         ticker = "VXF24"
-        start = '2022-01-01'
+        start = "2022-01-01"
         end = None
         df = quote_source._daily_bar(ticker, start, end)
         assert isinstance(df, pd.DataFrame)
-        assert df.columns.to_list() == ['Open', 'High', 'Low', 'Close', 'Volume', 'expire_date']
+        assert df.columns.to_list() == [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume",
+            "expire_date",
+        ]
         assert isinstance(df.index, pd.DatetimeIndex)
-        assert df.index[0].strftime('%Y-%m-%d') == '2023-04-24'
-        assert df.index[-1].strftime('%Y-%m-%d') == '2024-01-17'
+        assert df.index[0].strftime("%Y-%m-%d") == "2023-04-24"
+        assert df.index[-1].strftime("%Y-%m-%d") == "2024-01-17"
         assert df.index.duplicated().sum() == 0
         assert df.notna().all(axis=None) == True
 
     def test__minute_bar(self, quote_source):
         # Test case 1: Test getting minute bar data for a specific ticker, date range, and interval
         ticker = "VX"
-        start = '2022-01-01'
-        end = '2022-01-31'
+        start = "2022-01-01"
+        end = "2022-01-31"
         interval = 5
         with pytest.raises(NotImplementedError):
             quote_source._minute_bar(ticker, start, end, interval)
@@ -596,88 +661,93 @@ date	Open	High	Low	Close	Volume	expire_date
     def test_term_structure(self, quote_source: CboeFuturesQuoteSource):
         # Test case 1: Test getting futures term structure for a specific futures root
         futures_root = "VX"
-        df = quote_source.term_structure(futures_root, start='2022-01-01', end='2022-01-31')
+        df = quote_source.term_structure(
+            futures_root, start="2022-01-01", end="2022-01-31"
+        )
         assert isinstance(df, pd.DataFrame)
-        assert df.columns.to_list() == [f'M{i}' for i in range(0, 12)]
+        assert df.columns.to_list() == [f"M{i}" for i in range(0, 12)]
         assert isinstance(df.index, pd.DatetimeIndex)
-        assert df.index[0].strftime('%Y-%m-%d') == '2022-01-03'
-        assert df.index[-1].strftime('%Y-%m-%d') == '2022-01-31'
+        assert df.index[0].strftime("%Y-%m-%d") == "2022-01-03"
+        assert df.index[-1].strftime("%Y-%m-%d") == "2022-01-31"
         assert df.index.duplicated().sum() == 0
 
 
 class TestUnionQuoteSource:
     def test_ticker_timezone(self):
         config = [
-            ('AAPL', 'Yahoo', None),
-            ('GOOGL', 'Yahoo', None),
-            (None, 'Yahoo', None)
+            ("AAPL", "Yahoo", None),
+            ("GOOGL", "Yahoo", None),
+            (None, "Yahoo", None),
         ]
         quote_source = UnionQuoteSource(config)
-        assert quote_source.ticker_timezone('AAPL') == 'America/New_York'
-        assert quote_source.ticker_timezone('GOOGL') == 'America/New_York'
-        assert quote_source.ticker_timezone('MSFT') == 'America/New_York'
+        assert quote_source.ticker_timezone("AAPL") == "America/New_York"
+        assert quote_source.ticker_timezone("GOOGL") == "America/New_York"
+        assert quote_source.ticker_timezone("MSFT") == "America/New_York"
 
     def test_ticker_calendar(self):
-        config = [
-            ('AAPL,GOOGL', 'Yahoo', None),
-            (None, 'Yahoo', None)
-        ]
+        config = [("AAPL,GOOGL", "Yahoo", None), (None, "Yahoo", None)]
         quote_source = UnionQuoteSource(config)
-        assert quote_source.ticker_calendar('AAPL') == 'NYSE'
-        assert quote_source.ticker_calendar('GOOGL') == 'NYSE'
-        assert quote_source.ticker_calendar('MSFT') == 'NYSE'
+        assert quote_source.ticker_calendar("AAPL") == "NYSE"
+        assert quote_source.ticker_calendar("GOOGL") == "NYSE"
+        assert quote_source.ticker_calendar("MSFT") == "NYSE"
 
     def test_daily_bar(self):
         config = [
-            ('VX', 'CboeFutures', {'cf_method': 'backward', 'roll_day': -7}),
-            ('AAPL,GOOGL', 'Yahoo', None),
-            (None, 'Yahoo', None)
+            ("VX", "CboeFutures", {"cf_method": "backward", "roll_day": -7}),
+            ("AAPL,GOOGL", "Yahoo", None),
+            (None, "Yahoo", None),
         ]
         quote_source = UnionQuoteSource(config)
-        cf = QuoteSource.get_source('CboeFutures', cf_method='backward', roll_day=-7)
-        yh = QuoteSource.get_source('Yahoo')
-        start = '2022-01-01'
-        data = quote_source.daily_bar('VX,AAPL,GOOGL,MSFT', start=start)
-        vx = cf.daily_bar('VX', start=start)['VX']
-        assert_frame_equal(data['VX'].iloc[:len(vx)], vx, check_freq=False, check_dtype=False)
+        cf = QuoteSource.get_source("CboeFutures", cf_method="backward", roll_day=-7)
+        yh = QuoteSource.get_source("Yahoo")
+        start = "2022-01-01"
+        data = quote_source.daily_bar("VX,AAPL,GOOGL,MSFT", start=start)
+        vx = cf.daily_bar("VX", start=start)["VX"]
         assert_frame_equal(
-            data[['AAPL', 'GOOGL', 'MSFT']],
-            yh.daily_bar('AAPL,GOOGL,MSFT', start=start),
-            check_freq=False, check_dtype=False)
+            data["VX"].iloc[: len(vx)], vx, check_freq=False, check_dtype=False
+        )
+        assert_frame_equal(
+            data[["AAPL", "GOOGL", "MSFT"]],
+            yh.daily_bar("AAPL,GOOGL,MSFT", start=start),
+            check_freq=False,
+            check_dtype=False,
+        )
 
         config = [
-            ('VX', 'CboeFutures', {'cf_method': 'backward', 'roll_day': -7}),
-            ('AAPL,GOOGL', 'Yahoo', None)
+            ("VX", "CboeFutures", {"cf_method": "backward", "roll_day": -7}),
+            ("AAPL,GOOGL", "Yahoo", None),
         ]
         quote_source = UnionQuoteSource(config)
         with pytest.raises(RuntimeError):
-            quote_source.daily_bar('VX,AAPL,GOOGL,MSFT')    # MSFT is not in the config
+            quote_source.daily_bar("VX,AAPL,GOOGL,MSFT")  # MSFT is not in the config
 
         config = [
-            ('VX', 'CboeFutures', {'cf_method': 'backward', 'roll_day': -7}),
-            ('AAPL,GOOGL', 'Yahoo', None),
-            (None, 'Yahoo', None),
-            (None, 'CboeFutures', None)     # Invalid config
+            ("VX", "CboeFutures", {"cf_method": "backward", "roll_day": -7}),
+            ("AAPL,GOOGL", "Yahoo", None),
+            (None, "Yahoo", None),
+            (None, "CboeFutures", None),  # Invalid config
         ]
         with pytest.raises(ValueError):
             quote_source = UnionQuoteSource(config)
 
     def test_minute_bar_not_implemented(self):
         config = [
-            ('AAPL', 'Yahoo', None),
-            ('GOOGL', 'Yahoo', None),
-            (None, 'Yahoo', None)
+            ("AAPL", "Yahoo", None),
+            ("GOOGL", "Yahoo", None),
+            (None, "Yahoo", None),
         ]
         quote_source = UnionQuoteSource(config)
         with pytest.raises(NotImplementedError):
-            quote_source.minute_bar('AAPL', start='2022-01-01', end='2022-01-02', interval=1)
+            quote_source.minute_bar(
+                "AAPL", start="2022-01-01", end="2022-01-02", interval=1
+            )
 
     def test_spot_not_implemented(self):
         config = [
-            ('AAPL', 'Yahoo', None),
-            ('GOOGL', 'Yahoo', None),
-            (None, 'Yahoo', None)
+            ("AAPL", "Yahoo", None),
+            ("GOOGL", "Yahoo", None),
+            (None, "Yahoo", None),
         ]
         quote_source = UnionQuoteSource(config)
         with pytest.raises(NotImplementedError):
-            quote_source.spot(['AAPL', 'GOOGL'])
+            quote_source.spot(["AAPL", "GOOGL"])

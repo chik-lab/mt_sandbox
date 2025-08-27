@@ -15,9 +15,11 @@ from minitrade.trader import *
 
 @pytest.fixture
 def clean_db():
-    '''Recreate all tables in minitrade.pytest.db'''
-    db_loc = os.path.expanduser('~/.minitrade/database/minitrade.pytest.db')
-    sql = pkgutil.get_data('minitrade.cli', 'trader/schema/consolidated.sql').decode('utf-8')
+    """Recreate all tables in minitrade.pytest.db"""
+    db_loc = os.path.expanduser("~/.minitrade/database/minitrade.pytest.db")
+    sql = pkgutil.get_data("minitrade.cli", "trader/schema/consolidated.sql").decode(
+        "utf-8"
+    )
     with sqlite3.connect(db_loc) as conn:
         conn.executescript(sql)
     conn.close()
@@ -25,11 +27,11 @@ def clean_db():
 
 @pytest.fixture
 def clean_strategy():
-    '''Delete all files in stategy directory'''
-    st_dir = os.path.expanduser('~/.minitrade/strategy')
+    """Delete all files in stategy directory"""
+    st_dir = os.path.expanduser("~/.minitrade/strategy")
     for file in os.listdir(st_dir):
         st_loc = os.path.join(st_dir, file)
-        if st_loc.endswith('.py'):
+        if st_loc.endswith(".py"):
             Path(st_loc).unlink(missing_ok=True)
 
 
@@ -37,8 +39,9 @@ def ib_start():
     import uvicorn
 
     from minitrade.utils.config import config
+
     uvicorn.run(
-        'minitrade.broker.ibgateway:app',
+        "minitrade.broker.ibgateway:app",
         host=config.brokers.ib.gateway_admin_host,
         port=config.brokers.ib.gateway_admin_port,
         log_level=config.brokers.ib.gateway_admin_log_level,
@@ -49,8 +52,9 @@ def scheduler_start():
     import uvicorn
 
     from minitrade.utils.config import config
+
     uvicorn.run(
-        'minitrade.trader.scheduler:app',
+        "minitrade.trader.scheduler:app",
         host=config.scheduler.host,
         port=config.scheduler.port,
         log_level=config.scheduler.log_level,
@@ -59,7 +63,7 @@ def scheduler_start():
 
 @pytest.fixture
 def launch_scheduler():
-    '''Launch and shutdown scheduler'''
+    """Launch and shutdown scheduler"""
     schd = Process(target=scheduler_start)
     schd.start()
     time.sleep(5)
@@ -69,7 +73,7 @@ def launch_scheduler():
 
 @pytest.fixture
 def launch_ibgateway():
-    ''' Launch and shutdown IB gateway'''
+    """Launch and shutdown IB gateway"""
     gateway = Process(target=ib_start)
     gateway.start()
     time.sleep(3)
@@ -79,21 +83,27 @@ def launch_ibgateway():
 
 @pytest.fixture
 def create_account():
-    username = os.environ.get('IB_TEST_USERNAME')
-    password = os.environ.get('IB_TEST_PASSWORD')
+    username = os.environ.get("IB_TEST_USERNAME")
+    password = os.environ.get("IB_TEST_PASSWORD")
     assert username is not None and password is not None
-    account = BrokerAccount(alias='pytest_ib_account', broker='IB', mode='Paper', username=username, password=password)
+    account = BrokerAccount(
+        alias="pytest_ib_account",
+        broker="IB",
+        mode="Paper",
+        username=username,
+        password=password,
+    )
     account.save()
-    assert BrokerAccount.get_account('pytest_ib_account') == account
+    assert BrokerAccount.get_account("pytest_ib_account") == account
 
 
 @pytest.fixture
 def create_strategies():
-    st_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'strategy')
+    st_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "strategy")
     for file in os.listdir(st_dir):
-        if not file.endswith('.py'):
+        if not file.endswith(".py"):
             continue
-        with open(os.path.join(st_dir, file), 'r') as f:
+        with open(os.path.join(st_dir, file), "r") as f:
             content = f.read()
         StrategyManager.save(file, content)
         assert file in StrategyManager.list()

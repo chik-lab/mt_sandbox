@@ -2,7 +2,7 @@ from minitrade.backtest import Strategy
 
 
 class RotateBuying(Strategy):
-    '''A dumb strategy that buy a different asset everyday'''
+    """A dumb strategy that buy a different asset everyday"""
 
     def init(self):
         pass

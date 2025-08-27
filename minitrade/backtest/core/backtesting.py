@@ -5,6 +5,7 @@ module directly, e.g.
 
     from minitrade.backtest import Backtest, Strategy
 """
+
 import functools
 import multiprocessing as mp
 import os
@@ -27,26 +28,29 @@ from numpy.random import default_rng
 
 try:
     from tqdm.auto import tqdm as _tqdm
+
     _tqdm = partial(_tqdm, leave=False)
 except ImportError:
+
     def _tqdm(seq, **_):
         return seq
+
 
 from ._plotting import plot  # noqa: I001
 from ._stats import compute_stats
 from ._util import _as_str, _Data, _Indicator, try_
 
 __pdoc__ = {
-    'Strategy.__init__': False,
-    'Order.__init__': False,
-    'Position.__init__': False,
-    'Trade.__init__': False,
+    "Strategy.__init__": False,
+    "Order.__init__": False,
+    "Position.__init__": False,
+    "Trade.__init__": False,
 }
 
 
 class Allocation:
-    '''The `Allocation` class manages the allocation of values among different assets in a portfolio. It provides 
-    methods for creating and managing asset buckets, assigning weights to assets, and merging the weights into the 
+    """The `Allocation` class manages the allocation of values among different assets in a portfolio. It provides
+    methods for creating and managing asset buckets, assigning weights to assets, and merging the weights into the
     parent allocation object.
 
     `Allocation` is not meant to be instantiated directly. Instead, it is created automatically when a new
@@ -65,9 +69,9 @@ class Allocation:
 
     `Allocation` provides two ways to assign weights to assets:
 
-    1. Explicitly assign weights to assets using `Allocation.weights` property. 
+    1. Explicitly assign weights to assets using `Allocation.weights` property.
 
-        It's possible to assign weights to individual asset or to all assets in the asset space as a whole. Not all weights 
+        It's possible to assign weights to individual asset or to all assets in the asset space as a whole. Not all weights
         need to be specified. If an asset is not assigned a weight, it will have a weight of 0.
 
         Example:
@@ -83,7 +87,7 @@ class Allocation:
 
         A `Bucket` is a container that groups assets together and provieds methods for weight allocation. Assets can be added
         to the bucket by appending lists or filtering conditions. Weights can be assigned to the assets in the bucket using
-        different allocation methods. Multiple buckets can be created for different groups of assets. Once the weight 
+        different allocation methods. Multiple buckets can be created for different groups of assets. Once the weight
         allocation is done at bucket level , the weights of the buckets can be merged into those of the parent allocation object.
 
         Example:
@@ -102,17 +106,17 @@ class Allocation:
     The state of the `Allocation` object is managed by the `Strategy` object across rebalance cycles. A rebalance
     cycle involves:
 
-    1. Initializing the weight allocation at the beginning of the cycle by calling either `Allocation.assume_zero()` 
+    1. Initializing the weight allocation at the beginning of the cycle by calling either `Allocation.assume_zero()`
     to reset all weights to zero or `Allocation.assume_previous()` to inherit the weights from the previous cycle. This
     must be done before any weight allocation attempts.
     2. Adjusting the weight allocation using either explicitly assignment or `Bucket` method.
     3. Calling `Strategy.rebalance()` to rebalance the portfolio according to the current allocation plan.
 
     After each rebalance cycle, the weight allocation is reset, and the process starts over. At any point, the weight
-    allocation from the previous cycle can be accessed using the `previous_weights` property. 
+    allocation from the previous cycle can be accessed using the `previous_weights` property.
 
-    A rebalance cycle is not necessarily equal to the simulation time step. For example, simulation can be done at 
-    daily frequency, while the portfolio is rebalanced every month. In this case, the weight allocation is maintained 
+    A rebalance cycle is not necessarily equal to the simulation time step. For example, simulation can be done at
+    daily frequency, while the portfolio is rebalanced every month. In this case, the weight allocation is maintained
     across multiple time steps until the next time `Strategy.rebalance()` is called.
 
     Example:
@@ -133,46 +137,49 @@ class Allocation:
             # Rebalance the portfolio
             self.rebalance()
     ```
-    '''
+    """
 
     class Bucket:
-        '''`Bucket` is a container that groups assets together and applies weight allocation among them.
+        """`Bucket` is a container that groups assets together and applies weight allocation among them.
         A bucket is associated with a parent allocation object, while the allocation object can be
         associated with multiple buckets.
 
         Assets in a bucket are identified by their tickers. They are unique within the bucket, but can be
-        repeated in different buckets. 
+        repeated in different buckets.
 
-        Using `Bucket` for weight allocation takes 3 steps: 
+        Using `Bucket` for weight allocation takes 3 steps:
 
-        1. Assets are added to the bucket by appending lists or filtering conditions. The rank of the assets 
-        in the bucket is preserved and can be used to assign weights. 
-        2. Weights are assigned to the assets using different allocation methods. 
-        3. Once the weight allocation at bucket level is done, the weights of the bucket can be merged into 
+        1. Assets are added to the bucket by appending lists or filtering conditions. The rank of the assets
+        in the bucket is preserved and can be used to assign weights.
+        2. Weights are assigned to the assets using different allocation methods.
+        3. Once the weight allocation at bucket level is done, the weights of the bucket can be merged into
         those of the parent allocation object.
-        '''
+        """
 
-        def __init__(self, alloc: 'Allocation') -> None:
+        def __init__(self, alloc: "Allocation") -> None:
             self._alloc = alloc
             self._tickers = []
             self._weights = None
 
         @property
         def tickers(self) -> list:
-            '''Assets in the bucket. This is a read-only property.'''
+            """Assets in the bucket. This is a read-only property."""
             return self._tickers.copy()
 
         @property
         def weights(self) -> pd.Series:
-            '''Weights of the assets in the bucket. This is only available after weight allocation is done
-            by calling `Bucket.weight_*()` methods. This is a read-only property.'''
-            assert (self._weights >= 0).all(), 'Weight should be non-negative.'
-            assert self._weights.sum(
-            ) < 1.000000000000001, f'Total weight should be less than or equal to 1. Got {self._weights.sum()}'
+            """Weights of the assets in the bucket. This is only available after weight allocation is done
+            by calling `Bucket.weight_*()` methods. This is a read-only property."""
+            assert (self._weights >= 0).all(), "Weight should be non-negative."
+            assert (
+                self._weights.sum() < 1.000000000000001
+            ), f"Total weight should be less than or equal to 1. Got {self._weights.sum()}"
             return self._weights.copy()
 
-        def append(self, ranked_list: list | pd.Series, *conditions: list | pd.Series) -> 'Allocation.Bucket':
-            '''Add assets that are in the ranked list to the end of the bucket.
+        def append(
+            self, ranked_list: list | pd.Series, *conditions: list | pd.Series
+        ) -> "Allocation.Bucket":
+            """Add assets that are in the ranked list to the end of the bucket.
 
             `ranked_list` can be specified in three ways:
 
@@ -180,11 +187,11 @@ class Allocation:
             2. A boolean Series with assets as the index and a True value to indicate the asset should be added.
             3. A non-boolean Series with assets as the index and all assets in the index will be added.
 
-            The rank of the assets is determined by its order in the list or in the index. The rank of the assets 
+            The rank of the assets is determined by its order in the list or in the index. The rank of the assets
             in the bucket is preserved. If an asset is already in the bucket, its rank in bucket will not be affected
             by appending new list to the bucket, even if the asset is ranked differently in the new list.
 
-            Multiple conditions can be specified as filters to exclude certain assets in the ranked list from being 
+            Multiple conditions can be specified as filters to exclude certain assets in the ranked list from being
             added. Assets must satisfy all the conditions in order to be added to the bucket.
 
             `conditions` can be specified in the same way as `ranked_list`, only that the asset order in a condition
@@ -205,20 +212,29 @@ class Allocation:
             Args:
                 ranked_list: A list of assets or a Series of assets to be added to the bucket.
                 conditions: A list of assets or a Series of assets to be used as conditions to filter the assets.
-            '''
+            """
             list_and_conditions = [ranked_list] + list(conditions)
             candidates = {}
             for item in list_and_conditions:
-                item = [index for index, value in item.items() if not isinstance(
-                    value, bool) or value] if isinstance(item, pd.Series) else list(item)
+                item = (
+                    [
+                        index
+                        for index, value in item.items()
+                        if not isinstance(value, bool) or value
+                    ]
+                    if isinstance(item, pd.Series)
+                    else list(item)
+                )
                 for x in item:
                     candidates[x] = candidates.get(x, 0) + 1
-            candidates = [x for x in candidates if candidates[x] == len(list_and_conditions)]
+            candidates = [
+                x for x in candidates if candidates[x] == len(list_and_conditions)
+            ]
             self._tickers.extend([x for x in candidates if x not in self._tickers])
             return self
 
-        def remove(self, *conditions: list | pd.Series) -> 'Allocation.Bucket':
-            '''Remove assets that satisify all the given conditions from the bucket.
+        def remove(self, *conditions: list | pd.Series) -> "Allocation.Bucket":
+            """Remove assets that satisify all the given conditions from the bucket.
 
             `conditions` can be specified in three ways:
 
@@ -242,29 +258,40 @@ class Allocation:
             ```
             Args:
                 conditions: A list of assets or a Series of assets to be used as conditions to filter the assets.
-            '''
+            """
             if len(conditions) == 0:
                 return
             candidates = {}
             for item in conditions:
-                item = [index for index, value in item.items() if not isinstance(
-                    value, bool) or value] if isinstance(item, pd.Series) else list(item)
+                item = (
+                    [
+                        index
+                        for index, value in item.items()
+                        if not isinstance(value, bool) or value
+                    ]
+                    if isinstance(item, pd.Series)
+                    else list(item)
+                )
                 for x in item:
                     candidates[x] = candidates.get(x, 0) + 1
-            self._tickers = [x for x in self._tickers if candidates.get(x, 0) < len(conditions)]
+            self._tickers = [
+                x for x in self._tickers if candidates.get(x, 0) < len(conditions)
+            ]
             return self
 
-        def trim(self, limit: int) -> 'Allocation.Bucket':
-            '''Trim the bucket to a maximum number of assets.
+        def trim(self, limit: int) -> "Allocation.Bucket":
+            """Trim the bucket to a maximum number of assets.
 
             Args:
                 limit: Maximum number of assets should be included
-            '''
+            """
             self._tickers = self._tickers[:limit]
             return self
 
-        def weight_explicitly(self, weight: float | list | pd.Series) -> 'Allocation.Bucket':
-            '''Assign weights to the assets in the bucket.
+        def weight_explicitly(
+            self, weight: float | list | pd.Series
+        ) -> "Allocation.Bucket":
+            """Assign weights to the assets in the bucket.
 
             `weight` can be specified in three ways:
 
@@ -280,30 +307,40 @@ class Allocation:
             ```
             Args:
                 weight: A single value, a list of values or a Series of weights.
-            '''
+            """
             if len(self._tickers) == 0:
                 self._weights = pd.Series()
             elif isinstance(weight, Number):
-                assert 0 <= weight * len(self._tickers) < 1.000000000000001, 'Total weight should be within [0, 1].'
+                assert (
+                    0 <= weight * len(self._tickers) < 1.000000000000001
+                ), "Total weight should be within [0, 1]."
                 self._weights = pd.Series(weight, index=self._tickers)
             elif isinstance(weight, list):
-                assert all(0 <= x < 1.000000000000001 for x in weight), 'Weight should be non-negative.'
-                assert sum(weight) < 1.000000000000001, 'Total weight should be less than or equal to 1.'
-                weight = weight[:len(self._tickers)]
-                weight.extend([0.] * (len(self._tickers) - len(weight)))
+                assert all(
+                    0 <= x < 1.000000000000001 for x in weight
+                ), "Weight should be non-negative."
+                assert (
+                    sum(weight) < 1.000000000000001
+                ), "Total weight should be less than or equal to 1."
+                weight = weight[: len(self._tickers)]
+                weight.extend([0.0] * (len(self._tickers) - len(weight)))
                 self._weights = pd.Series(weight, index=self._tickers)
             elif isinstance(weight, pd.Series):
-                assert (weight >= 0).all(), 'Weight should be non-negative.'
-                assert weight.sum() < 1.000000000000001, 'Total weight should be less than or equal to 1.'
+                assert (weight >= 0).all(), "Weight should be non-negative."
+                assert (
+                    weight.sum() < 1.000000000000001
+                ), "Total weight should be less than or equal to 1."
                 weight = weight[weight.index.isin(self._tickers)]
-                self._weights = pd.Series(0., index=self._tickers)
+                self._weights = pd.Series(0.0, index=self._tickers)
                 self._weights.loc[weight.index] = weight
             else:
-                raise ValueError('Weight should be a single value, a list of values or a Series of weights.')
+                raise ValueError(
+                    "Weight should be a single value, a list of values or a Series of weights."
+                )
             return self
 
-        def weight_equally(self, sum_: float = None) -> 'Allocation.Bucket':
-            '''Allocate equity value equally to the assets in the bucket.
+        def weight_equally(self, sum_: float = None) -> "Allocation.Bucket":
+            """Allocate equity value equally to the assets in the bucket.
 
             `sum_` should be between 0 and 1, with 1 means 100% of value should be allocated.
 
@@ -313,19 +350,25 @@ class Allocation:
             ```
 
             Args:
-                sum_: Total weight that should be allocated. 
-            '''
-            assert sum_ is None or 0 <= sum_ < 1.000000000000001, 'Total weight should be within [0, 1].'
+                sum_: Total weight that should be allocated.
+            """
+            assert (
+                sum_ is None or 0 <= sum_ < 1.000000000000001
+            ), "Total weight should be within [0, 1]."
             if sum_ is None:
                 sum_ = self._alloc.unallocated
             if len(self._tickers) == 0:
                 self._weights = pd.Series()
             else:
-                self._weights = pd.Series(1 / len(self._tickers), index=self._tickers) * sum_
+                self._weights = (
+                    pd.Series(1 / len(self._tickers), index=self._tickers) * sum_
+                )
             return self
 
-        def weight_proportionally(self, relative_weights: list, sum_: float = None) -> 'Allocation.Bucket':
-            '''Allocate equity value proportionally to the assets in the bucket.
+        def weight_proportionally(
+            self, relative_weights: list, sum_: float = None
+        ) -> "Allocation.Bucket":
+            """Allocate equity value proportionally to the assets in the bucket.
 
             `sum_` should be between 0 and 1, with 1 means 100% of value should be allocated.
 
@@ -336,33 +379,42 @@ class Allocation:
 
             Args:
                 relative_weights: A list of relative weights. The length of the list should be the same as the number of assets in the bucket.
-                sum_: Total weight that should be allocated. 
-            '''
+                sum_: Total weight that should be allocated.
+            """
             assert len(relative_weights) == len(
-                self._tickers), f'Length of relative_weight {len(relative_weights)} does not match number of assets {len(self._tickers)}'
-            assert all(x >= 0 for x in relative_weights), 'Relative weights should be non-negative.'
-            assert sum_ is None or 0 <= sum_ < 1.000000000000001, 'Total weight should be within [0, 1].'
+                self._tickers
+            ), f"Length of relative_weight {len(relative_weights)} does not match number of assets {len(self._tickers)}"
+            assert all(
+                x >= 0 for x in relative_weights
+            ), "Relative weights should be non-negative."
+            assert (
+                sum_ is None or 0 <= sum_ < 1.000000000000001
+            ), "Total weight should be within [0, 1]."
             if sum_ is None:
                 sum_ = self._alloc.unallocated
             if len(self._tickers) == 0:
                 self._weights = pd.Series()
             else:
-                self._weights = pd.Series(relative_weights, index=self._tickers) / sum(relative_weights) * sum_
+                self._weights = (
+                    pd.Series(relative_weights, index=self._tickers)
+                    / sum(relative_weights)
+                    * sum_
+                )
             return self
 
-        def apply(self, method: str = 'update') -> 'Allocation.Bucket':
-            '''Apply the weight allocation to the parent allocation object.
+        def apply(self, method: str = "update") -> "Allocation.Bucket":
+            """Apply the weight allocation to the parent allocation object.
 
             `method` controls how the bucket weight allocation should be merged into the parent allocation object.
 
             When `method` is `update`, the weights of assets in the bucket will update the weights of the same assets
-            in the parent allocation object. If an asset is not in the bucket, its weight in the parent allocation object 
+            in the parent allocation object. If an asset is not in the bucket, its weight in the parent allocation object
             will not be changed. This is the default method.
 
-            When `method` is `overwrite`, the weights of the parent allocation object will be replaced by the weights of the 
+            When `method` is `overwrite`, the weights of the parent allocation object will be replaced by the weights of the
             assets in the bucket or set to 0 if the asset is not in the bucket.
 
-            When `method` is `accumulate`, the weights of the assets in the bucket will be added to the weights of the same 
+            When `method` is `accumulate`, the weights of the assets in the bucket will be added to the weights of the same
             assets, while the weights of the assets not in the bucket will remain unchanged.
 
             If the bucket is empty, no change will be made to the parent allocation object.
@@ -371,23 +423,25 @@ class Allocation:
             is merged. It is the responsibility of the user to ensure the final weights are valid before use.
 
             Args:
-                method: Method to merge the bucket into the parent allocation object. 
+                method: Method to merge the bucket into the parent allocation object.
                     Available methods are 'update', 'overwrite', 'accumulate'.
-            '''
+            """
             if self._weights is None:
-                raise RuntimeError('Bucket.weight_*() should be called before apply()')
+                raise RuntimeError("Bucket.weight_*() should be called before apply()")
             if self.weights.empty:
                 return self
             index = self.weights.index
-            if method == 'update':
+            if method == "update":
                 self._alloc.weights.loc[index] = self.weights
-            elif method == 'overwrite':
-                self._alloc.weights.loc[:] = 0.
+            elif method == "overwrite":
+                self._alloc.weights.loc[:] = 0.0
                 self._alloc.weights.loc[index] = self.weights
-            elif method == 'accumulate':
-                self._alloc.weights.loc[index] = self._alloc.weights.loc[index] + self.weights
+            elif method == "accumulate":
+                self._alloc.weights.loc[index] = (
+                    self._alloc.weights.loc[index] + self.weights
+                )
             else:
-                raise ValueError(f'Invalid method {method}')
+                raise ValueError(f"Invalid method {method}")
             return self
 
         def __len__(self) -> int:
@@ -405,17 +459,17 @@ class Allocation:
                 return False
 
         def __repr__(self) -> str:
-            return f'Bucket(tickers={self._tickers})'
+            return f"Bucket(tickers={self._tickers})"
 
     class BucketGroup:
-        def __init__(self, alloc: 'Allocation') -> None:
+        def __init__(self, alloc: "Allocation") -> None:
             self._alloc = alloc
             self._buckets = {}
 
         def clear(self) -> None:
             self._buckets.clear()
 
-        def __getitem__(self, name: str) -> 'Allocation.Bucket':
+        def __getitem__(self, name: str) -> "Allocation.Bucket":
             if name not in self._buckets:
                 self._buckets[name] = Allocation.Bucket(self._alloc)
             return self._buckets[name]
@@ -428,7 +482,7 @@ class Allocation:
 
     def __init__(self, tickers: list) -> None:
         self._tickers = tickers
-        self._previous_weights = pd.Series(0., index=tickers)
+        self._previous_weights = pd.Series(0.0, index=tickers)
         self._weights = None
         self._bucket_group = Allocation.BucketGroup(self)
 
@@ -438,17 +492,18 @@ class Allocation:
             if self._weights is None:
                 raise RuntimeError('"Allocation.assume_*()" must be called first.')
             return func(self, *args, **kwargs)
+
         return inner
 
     @property
     def tickers(self) -> list:
-        '''Assets representing the asset space. This is a read-only property'''
+        """Assets representing the asset space. This is a read-only property"""
         return self._tickers.copy()
 
     @property
     @_after_assume
     def bucket(self) -> BucketGroup:
-        '''`bucket` provides access to a dictionary of buckets.
+        """`bucket` provides access to a dictionary of buckets.
 
         A bucket can be accessed with a string key. If the bucket does not exist, one will be created automatically.
 
@@ -459,13 +514,13 @@ class Allocation:
         # Access the bucket named 'equity'
         bucket = strategy.alloc.bucket['equity']
         ```
-        '''
+        """
         return self._bucket_group
 
     @property
     @_after_assume
     def weights(self) -> pd.Series:
-        '''Current weight allocation. Weight should be non-negative and the total weight should be less than or equal to 1.
+        """Current weight allocation. Weight should be non-negative and the total weight should be less than or equal to 1.
 
         It's possible to assign weights to individual asset or to all assets in the asset space as a whole. When assigning
         weights as a whole, only non-zero weights need to be specified, and other weights are assigned zero automatically.
@@ -478,66 +533,70 @@ class Allocation:
         # Assign weight to all assets
         strategy.alloc.weights = pd.Series([0.1, 0.2, 0.3], index=['A', 'B', 'C'])
         ```
-        '''
-        assert self._weights.index.to_list() == self._tickers, 'Weight index should be the same as the asset space.'
-        assert (self._weights >= 0).all(), 'Weight should be non-negative.'
-        assert self._weights.sum() < 1.000000000000001, f'Total weight should be less than or equal to 1. Got {self._weights.sum()}'
+        """
+        assert (
+            self._weights.index.to_list() == self._tickers
+        ), "Weight index should be the same as the asset space."
+        assert (self._weights >= 0).all(), "Weight should be non-negative."
+        assert (
+            self._weights.sum() < 1.000000000000001
+        ), f"Total weight should be less than or equal to 1. Got {self._weights.sum()}"
         return self._weights
 
     @weights.setter
     @_after_assume
     def weights(self, value: pd.Series) -> None:
-        assert (value >= 0).all(), 'Weight should be non-negative.'
-        assert value.sum() < 1.000000000000001, f'Total weight should be less than or equal to 1. Got {value.sum()}'
-        self._weights.loc[:] = 0.
+        assert (value >= 0).all(), "Weight should be non-negative."
+        assert (
+            value.sum() < 1.000000000000001
+        ), f"Total weight should be less than or equal to 1. Got {value.sum()}"
+        self._weights.loc[:] = 0.0
         self._weights.loc[value.index] = value
 
     @property
     def previous_weights(self) -> pd.Series:
-        '''Previous weight allocation. This is a read-only property.'''
+        """Previous weight allocation. This is a read-only property."""
         return self._previous_weights.copy()
 
     def assume_zero(self):
-        '''Assume all assets have zero weight to begin with in a new rebalance cycle. 
-        '''
-        self._weights = pd.Series(0., index=self.tickers)
+        """Assume all assets have zero weight to begin with in a new rebalance cycle."""
+        self._weights = pd.Series(0.0, index=self.tickers)
 
     def assume_previous(self):
-        '''Assume all assets inherit the same weight as used in the previous rebalance cycle.
-        '''
+        """Assume all assets inherit the same weight as used in the previous rebalance cycle."""
         self._weights = self.previous_weights.copy()
 
     @property
     @_after_assume
     def unallocated(self) -> float:
-        '''Unallocated equity weight. It's the remaining weight that can be allocated to assets. This is a read-only property.'''
+        """Unallocated equity weight. It's the remaining weight that can be allocated to assets. This is a read-only property."""
         allocated = self._weights.abs().sum()
-        assert allocated < 1.000000000000001, f'Total weight should be less than or equal to 1. Got {allocated}'
-        return 1. - allocated
+        assert (
+            allocated < 1.000000000000001
+        ), f"Total weight should be less than or equal to 1. Got {allocated}"
+        return 1.0 - allocated
 
     @_after_assume
     def normalize(self):
-        '''Normalize the weight allocation so that the sum of weights equals 1.'''
+        """Normalize the weight allocation so that the sum of weights equals 1."""
         self._weights = self._weights / self._weights.abs().sum()
         return self.weights
 
     @property
     @_after_assume
     def modified(self):
-        '''True if weight allocation is changed from previous values.'''
+        """True if weight allocation is changed from previous values."""
         return not self.weights.equals(self.previous_weights)
 
     def _next(self):
-        '''Prepare for the next rebalance cycle. This is called after each call to `Strategy.rebalance()`.
-        '''
+        """Prepare for the next rebalance cycle. This is called after each call to `Strategy.rebalance()`."""
         self._previous_weights = self._weights.copy()
         self._weights = None
         self._bucket_group.clear()
 
     def _clear(self):
-        '''Clear the weight allocation and buckets.
-        '''
-        self._previous_weights = pd.Series(0., index=self._tickers)
+        """Clear the weight allocation and buckets."""
+        self._previous_weights = pd.Series(0.0, index=self._tickers)
         self._weights = None
         self._bucket_group.clear()
 
@@ -562,14 +621,16 @@ class Strategy(ABC):
         self._start_on_day = 0
 
     def __repr__(self):
-        return '<Strategy ' + str(self) + '>'
+        return "<Strategy " + str(self) + ">"
 
     def __str__(self):
-        params = ','.join(f'{i[0]}={i[1]}' for i in zip(self._params.keys(),
-                                                        map(_as_str, self._params.values())))
+        params = ",".join(
+            f"{i[0]}={i[1]}"
+            for i in zip(self._params.keys(), map(_as_str, self._params.values()))
+        )
         if params:
-            params = '(' + params + ')'
-        return f'{self.__class__.__name__}{params}'
+            params = "(" + params + ")"
+        return f"{self.__class__.__name__}{params}"
 
     def _check_params(self, params):
         for k, v in params.items():
@@ -577,14 +638,22 @@ class Strategy(ABC):
                 raise AttributeError(
                     f"Strategy '{self.__class__.__name__}' is missing parameter '{k}'."
                     "Strategy class should define parameters as class variables before they "
-                    "can be optimized or run with.")
+                    "can be optimized or run with."
+                )
             setattr(self, k, v)
         return params
 
-    def I(self,  # noqa: E743
-          funcval: Union[pd.DataFrame, pd.Series, Callable], *args,
-          name=None, plot=True, overlay=None, color=None, scatter=False,
-          ** kwargs) -> np.ndarray:
+    def I(
+        self,  # noqa: E743
+        funcval: Union[pd.DataFrame, pd.Series, Callable],
+        *args,
+        name=None,
+        plot=True,
+        overlay=None,
+        color=None,
+        scatter=False,
+        **kwargs,
+    ) -> np.ndarray:
         """
         Declare an indicator. An indicator is just an array of values,
         but one that is revealed gradually in
@@ -596,7 +665,7 @@ class Strategy(ABC):
         same length as `minitrade.backtest.core.backtesting.Strategy.data`, or
         the indicator array(s) itself as a DataFrame, Series, or arrays.
 
-        In the plot legend, the indicator is labeled with function name, 
+        In the plot legend, the indicator is labeled with function name,
         DataFrame column name, or Series name, unless `name` overrides it.
 
         If `plot` is `True`, the indicator is plotted on the resulting
@@ -605,7 +674,7 @@ class Strategy(ABC):
         If `overlay` is `True`, the indicator is plotted overlaying the
         price candlestick chart (suitable e.g. for moving averages).
         If `False`, the indicator is plotted standalone below the
-        candlestick chart. 
+        candlestick chart.
 
         `color` can be string hex RGB triplet or X11 color name.
         By default, the next available color is assigned.
@@ -623,30 +692,39 @@ class Strategy(ABC):
         """
         if callable(funcval):
             if name is None:
-                params = ','.join(filter(None, map(_as_str, chain(args, kwargs.values()))))
+                params = ",".join(
+                    filter(None, map(_as_str, chain(args, kwargs.values())))
+                )
                 func_name = _as_str(funcval)
-                name = (f'{func_name}({params})' if params else f'{func_name}')
+                name = f"{func_name}({params})" if params else f"{func_name}"
             else:
-                name = name.format(*map(_as_str, args),
-                                   **dict(zip(kwargs.keys(), map(_as_str, kwargs.values()))))
+                name = name.format(
+                    *map(_as_str, args),
+                    **dict(zip(kwargs.keys(), map(_as_str, kwargs.values()))),
+                )
             value = funcval(*args, **kwargs)
         else:
             value = funcval
 
         if not isinstance(value, (pd.DataFrame, pd.Series)):
             if value is not None:
-                value = try_(lambda: np.asarray(value, order='C'), None)
+                value = try_(lambda: np.asarray(value, order="C"), None)
             is_arraylike = bool(value is not None and value.shape)
 
             # Optionally flip the array if the long side of array is not on the 1st dimension
             if is_arraylike and np.argmin(value.shape) == 0:
                 value = value.T
 
-            if not is_arraylike or not 1 <= value.ndim <= 2 or value.shape[0] != len(self._data):
+            if (
+                not is_arraylike
+                or not 1 <= value.ndim <= 2
+                or value.shape[0] != len(self._data)
+            ):
                 raise ValueError(
-                    'Indicators of numpy.ndarray must have the same '
+                    "Indicators of numpy.ndarray must have the same "
                     f'length as `data` (data shape: {len(self._data)}; indicator "{name}" '
-                    f'shape: {getattr(value, "shape" , "")}, returned value: {value})')
+                    f'shape: {getattr(value, "shape" , "")}, returned value: {value})'
+                )
             elif value.ndim == 1:
                 value = pd.Series(value, index=self._data.index, name=name)
             else:
@@ -654,8 +732,16 @@ class Strategy(ABC):
 
         # Use an experimental feature to save DataFrame/Series metadata
         # https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.attrs.html
-        value.attrs.update({'name': name, 'plot': plot, 'overlay': overlay,
-                           'color': color, 'scatter': scatter, **kwargs})
+        value.attrs.update(
+            {
+                "name": name,
+                "plot": plot,
+                "overlay": overlay,
+                "color": color,
+                "scatter": scatter,
+                **kwargs,
+            }
+        )
         self._indicators.append(value)
         return value
 
@@ -687,17 +773,22 @@ class Strategy(ABC):
         """
 
     class __FULL_EQUITY(float):  # noqa: N801
-        def __repr__(self): return '.9999'
+        def __repr__(self):
+            return ".9999"
+
     _FULL_EQUITY = __FULL_EQUITY(1 - sys.float_info.epsilon)
 
-    def buy(self, *,
-            ticker: str = None,
-            size: float = _FULL_EQUITY,
-            limit: Optional[float] = None,
-            stop: Optional[float] = None,
-            sl: Optional[float] = None,
-            tp: Optional[float] = None,
-            tag: object = None):
+    def buy(
+        self,
+        *,
+        ticker: str = None,
+        size: float = _FULL_EQUITY,
+        limit: Optional[float] = None,
+        stop: Optional[float] = None,
+        sl: Optional[float] = None,
+        tp: Optional[float] = None,
+        tag: object = None,
+    ):
         """
         Place a new long order. For explanation of parameters, see `Order` and its properties.
 
@@ -707,18 +798,22 @@ class Strategy(ABC):
 
         See also `Strategy.sell()`.
         """
-        assert 0 < size < 1 or round(size) == size, \
-            "size must be a positive fraction of equity, or a positive whole number of units"
+        assert (
+            0 < size < 1 or round(size) == size
+        ), "size must be a positive fraction of equity, or a positive whole number of units"
         return self._broker.new_order(ticker, size, limit, stop, sl, tp, tag)
 
-    def sell(self, *,
-             ticker: str = None,
-             size: float = _FULL_EQUITY,
-             limit: Optional[float] = None,
-             stop: Optional[float] = None,
-             sl: Optional[float] = None,
-             tp: Optional[float] = None,
-             tag: object = None):
+    def sell(
+        self,
+        *,
+        ticker: str = None,
+        size: float = _FULL_EQUITY,
+        limit: Optional[float] = None,
+        stop: Optional[float] = None,
+        sl: Optional[float] = None,
+        tp: Optional[float] = None,
+        tag: object = None,
+    ):
         """
         Place a new short order. For explanation of parameters, see `Order` and its properties.
 
@@ -730,49 +825,70 @@ class Strategy(ABC):
             If you merely want to close an existing long position,
             use `Position.close()` or `Trade.close()`.
         """
-        assert 0 < size < 1 or round(size) == size, \
-            "size must be a positive fraction of equity, or a positive whole number of units"
+        assert (
+            0 < size < 1 or round(size) == size
+        ), "size must be a positive fraction of equity, or a positive whole number of units"
         return self._broker.new_order(ticker, -size, limit, stop, sl, tp, tag)
 
-    def rebalance(self, force: bool = False, rtol: float = 0.01, atol: int = 0, cash_reserve: float = 0.1):
+    def rebalance(
+        self,
+        force: bool = False,
+        rtol: float = 0.01,
+        atol: int = 0,
+        cash_reserve: float = 0.1,
+    ):
         """
         Rebalance the portfolio according to the current weight allocation.
 
         If the weight allocation is not changed from the previous cycle, the rebalance is skipped. This behavior can be
         overridden by setting `force` to `True`, which will force rebalance even if the weight allocation is unchanged.
-        This is useful when the actual portfolio value deviates from the target value due to price changes and should 
+        This is useful when the actual portfolio value deviates from the target value due to price changes and should
         be corrected.
 
-        When a rebalance should be performed, the difference between the target and actual portfolio, defined as the sum 
+        When a rebalance should be performed, the difference between the target and actual portfolio, defined as the sum
         of absolute difference of individual assets, is calculated. If the difference is too small compared to the
         relative tolerance `rtol` or the absolute tolerance `atol`, the rebalance is again skipped. This can be used
-        to avoid unnecessary transaction cost. An exception is when the target weight of an asset is zero, in which case 
+        to avoid unnecessary transaction cost. An exception is when the target weight of an asset is zero, in which case
         the position of the asset, if exists, is always closed.
 
         `cash_reserve` is the ratio of total equity reserved as cash to account for order quantity rounding and sudden
         price changes between order placement and execution. It is recommended to set this value to a small positive
-        number to avoid order rejection due to insufficient cash. The minimum value may depend on the volatility of the 
+        number to avoid order rejection due to insufficient cash. The minimum value may depend on the volatility of the
         assets.
 
         Args:
             force: If True, rebalance will be performed even if the current weight allocation
                 is not changed from the previous.
-            rtol: Relative tolerance of the total absolute value difference between current 
-                and previous allocation vs. total portfolio value. If the difference is smaller 
+            rtol: Relative tolerance of the total absolute value difference between current
+                and previous allocation vs. total portfolio value. If the difference is smaller
                 than `rtol`, rebalance will not be performed.
-            atol: Absolute tolerance of the total absolute value difference between current 
-                and previous allocation. If the difference is smaller than `atol`, rebalance 
+            atol: Absolute tolerance of the total absolute value difference between current
+                and previous allocation. If the difference is smaller than `atol`, rebalance
                 will not be performed.
-            cash_reserve: Ratio of total equity reserved as cash to account for order 
+            cash_reserve: Ratio of total equity reserved as cash to account for order
                 quantity rounding and sudden price changes between order placement and
-                execution. 
+                execution.
         """
-        self._broker.rebalance(alloc=self._alloc, force=force, rtol=rtol, atol=atol, cash_reserve=cash_reserve)
+        self._broker.rebalance(
+            alloc=self._alloc,
+            force=force,
+            rtol=rtol,
+            atol=atol,
+            cash_reserve=cash_reserve,
+        )
 
-    def record(self, name: str = None, plot: bool = True, overlay: bool = None, color: str = None, scatter: bool = False, **kwargs):
+    def record(
+        self,
+        name: str = None,
+        plot: bool = True,
+        overlay: bool = None,
+        color: str = None,
+        scatter: bool = False,
+        **kwargs,
+    ):
         """
         Record arbitrary key-value pairs as time series. This can be used for diagnostic
-        data collection or for plotting custom data. 
+        data collection or for plotting custom data.
 
         Values to be recorded should be passed as keyword arguments. The value can be a scalar, a dictionary, or a
         pandas Series. If a dictionary or a Series is passed, its keys will be used as names for time series.
@@ -801,15 +917,26 @@ class Strategy(ABC):
             if isinstance(v, dict) or isinstance(v, pd.Series):
                 v = dict(v)
                 if k not in self._records:
-                    self._records[k] = pd.DataFrame(index=self._data_index, columns=v.keys())
-                self._records[k].loc[self._broker.now, list(v.keys())] = list(v.values())
+                    self._records[k] = pd.DataFrame(
+                        index=self._data_index, columns=v.keys()
+                    )
+                self._records[k].loc[self._broker.now, list(v.keys())] = list(
+                    v.values()
+                )
             else:
                 if k not in self._records:
                     self._records[k] = pd.Series(index=self._data_index)
-                self._records[k].iloc[len(self._data)-1] = v
+                self._records[k].iloc[len(self._data) - 1] = v
             self._records[k].name = name or k
-            self._records[k].attrs.update({'name': name or k, 'plot': plot, 'overlay': overlay,
-                                           'color': color, 'scatter': scatter})
+            self._records[k].attrs.update(
+                {
+                    "name": name or k,
+                    "plot": plot,
+                    "overlay": overlay,
+                    "color": color,
+                    "scatter": scatter,
+                }
+            )
 
     @property
     def equity(self) -> float:
@@ -848,19 +975,19 @@ class Strategy(ABC):
     @property
     def storage(self) -> dict | None:
         """Storage is a dictionary for saving custom data across backtest runs
-        when used in the context of automated trading in incremental mode. 
+        when used in the context of automated trading in incremental mode.
 
-        If backtest finishes successfully, any modification to the dictionary 
-        is persisted and can be accessed in future runs. If backtest fails due 
-        to any error, the modification is not saved. If backtest runs in dryrun 
+        If backtest finishes successfully, any modification to the dictionary
+        is persisted and can be accessed in future runs. If backtest fails due
+        to any error, the modification is not saved. If backtest runs in dryrun
         mode, the modification is not saved.
 
-        No storage is provided when trading in "strict" mode, in which case `storage` 
-        is None. 
+        No storage is provided when trading in "strict" mode, in which case `storage`
+        is None.
         """
         return self._broker._storage
 
-    def position(self, ticker: str = None) -> 'Position':
+    def position(self, ticker: str = None) -> "Position":
         """Instance of `minitrade.backtest.core.backtesting.Position`.
 
         For single asset strategy, `ticker` can be left as None, which returns
@@ -870,16 +997,16 @@ class Strategy(ABC):
         return self._broker.positions[ticker]
 
     @property
-    def orders(self) -> 'List[Order]':
+    def orders(self) -> "List[Order]":
         """List of orders (see `Order`) waiting for execution."""
         return self._broker.orders
 
-    def trades(self, ticker: str = None) -> 'Tuple[Trade, ...]':
+    def trades(self, ticker: str = None) -> "Tuple[Trade, ...]":
         """List of active trades (see `Trade`)."""
         return tuple(self._broker.trades[ticker] if ticker else self._broker.all_trades)
 
     @property
-    def closed_trades(self) -> 'Tuple[Trade, ...]':
+    def closed_trades(self) -> "Tuple[Trade, ...]":
         """List of settled trades (see `Trade`)."""
         return tuple(self._broker.closed_trades)
 
@@ -891,11 +1018,11 @@ class Strategy(ABC):
     def start_on_day(self, n: int):
         """Hint to start the backtest on a specific day.
 
-        This can be used to define a warm-up period, ensuring at least `n` days of data 
-        are available when `next()` is called for the first time. 
+        This can be used to define a warm-up period, ensuring at least `n` days of data
+        are available when `next()` is called for the first time.
 
-        When the backtest starts depends both on `n` and on the availability of indicators. 
-        If indicators are defined, the backtest will start when all indicators have 
+        When the backtest starts depends both on `n` and on the availability of indicators.
+        If indicators are defined, the backtest will start when all indicators have
         valid data or on the `n`-th day, whichever comes later.
 
         This method should be called in `init()`.
@@ -907,7 +1034,7 @@ class Strategy(ABC):
         self._start_on_day = n
 
     @classmethod
-    def prepare_data(cls, tickers: 'List[str]', start: str) -> pd.DataFrame | None:
+    def prepare_data(cls, tickers: "List[str]", start: str) -> pd.DataFrame | None:
         """Prepare data for trading.
 
         This class method can be overridden in a `Strategy` implementation to provide
@@ -935,7 +1062,7 @@ class Position:
             ...  # we have a position, either long or short
     """
 
-    def __init__(self, broker: '_Broker', ticker: str):
+    def __init__(self, broker: "_Broker", ticker: str):
         self.__broker = broker
         self.__ticker = ticker
 
@@ -957,7 +1084,9 @@ class Position:
         """Profit (positive) or loss (negative) of the current position in percent."""
         weights = np.abs([trade.size for trade in self.__broker.trades[self.__ticker]])
         weights = weights / weights.sum()
-        pl_pcts = np.array([trade.pl_pct for trade in self.__broker.trades[self.__ticker]])
+        pl_pcts = np.array(
+            [trade.pl_pct for trade in self.__broker.trades[self.__ticker]]
+        )
         return (pl_pcts * weights).sum()
 
     @property
@@ -970,7 +1099,7 @@ class Position:
         """True if the position is short (position size is negative)."""
         return self.size < 0
 
-    def close(self, portion: float = 1.):
+    def close(self, portion: float = 1.0):
         """
         Close portion of position by closing `portion` of each active trade. See `Trade.close`.
         """
@@ -978,7 +1107,7 @@ class Position:
             trade.close(portion)
 
     def __repr__(self):
-        return f'<Position: {self.size} ({len(self.__broker.trades[self.__ticker])} trades)>'
+        return f"<Position: {self.size} ({len(self.__broker.trades[self.__ticker])} trades)>"
 
 
 class _OutOfMoneyError(Exception):
@@ -1001,16 +1130,19 @@ class Order:
     [Good 'Til Canceled]: https://www.investopedia.com/terms/g/gtc.asp
     """
 
-    def __init__(self, broker: '_Broker',
-                 ticker: str,
-                 size: float,
-                 limit_price: Optional[float] = None,
-                 stop_price: Optional[float] = None,
-                 sl_price: Optional[float] = None,
-                 tp_price: Optional[float] = None,
-                 parent_trade: Optional['Trade'] = None,
-                 entry_time: datetime = None,
-                 tag: object = None):
+    def __init__(
+        self,
+        broker: "_Broker",
+        ticker: str,
+        size: float,
+        limit_price: Optional[float] = None,
+        stop_price: Optional[float] = None,
+        sl_price: Optional[float] = None,
+        tp_price: Optional[float] = None,
+        parent_trade: Optional["Trade"] = None,
+        entry_time: datetime = None,
+        tag: object = None,
+    ):
         self.__broker = broker
         self.__ticker = ticker
         assert size != 0
@@ -1025,19 +1157,24 @@ class Order:
 
     def _replace(self, **kwargs):
         for k, v in kwargs.items():
-            setattr(self, f'_{self.__class__.__qualname__}__{k}', v)
+            setattr(self, f"_{self.__class__.__qualname__}__{k}", v)
         return self
 
     def __repr__(self):
-        return f'<Order {self.__ticker} {{}}>'.format(', '.join(f'{param}={round(value, 5)}'
-                                                                for param, value in (
-                                                                    ('size', self.__size),
-                                                                    ('limit', self.__limit_price),
-                                                                    ('stop', self.__stop_price),
-                                                                    ('sl', self.__sl_price),
-                                                                    ('tp', self.__tp_price),
-                                                                    ('contingent', self.is_contingent),
-                                                                ) if value is not None))
+        return f"<Order {self.__ticker} {{}}>".format(
+            ", ".join(
+                f"{param}={round(value, 5)}"
+                for param, value in (
+                    ("size", self.__size),
+                    ("limit", self.__limit_price),
+                    ("stop", self.__stop_price),
+                    ("sl", self.__sl_price),
+                    ("tp", self.__tp_price),
+                    ("contingent", self.is_contingent),
+                )
+                if value is not None
+            )
+        )
 
     def cancel(self):
         """Cancel the order."""
@@ -1071,7 +1208,7 @@ class Order:
 
     @size.setter
     def size(self, size):
-        """ Setter of order size """
+        """Setter of order size"""
         self.__size = size
 
     @property
@@ -1125,7 +1262,7 @@ class Order:
         """
         return self.__tag
 
-    __pdoc__['Order.parent_trade'] = False
+    __pdoc__["Order.parent_trade"] = False
 
     # Extra properties
 
@@ -1165,7 +1302,15 @@ class Trade:
     Find active trades in `Strategy.trades` and closed, settled trades in `Strategy.closed_trades`.
     """
 
-    def __init__(self, broker: '_Broker', ticker: str, size: int, entry_price: float, entry_bar, tag):
+    def __init__(
+        self,
+        broker: "_Broker",
+        ticker: str,
+        size: int,
+        entry_price: float,
+        entry_bar,
+        tag,
+    ):
         self.__broker = broker
         self.__ticker = ticker
         self.__size = size
@@ -1181,24 +1326,34 @@ class Trade:
         self.__exit_commission: float = 0.0
 
     def __repr__(self):
-        return f'<Trade size={self.__size} time={self.__entry_bar}-{self.__exit_bar or ""} ' \
-               f'price={self.__entry_price}-{self.__exit_price or ""} pl={self.pl:.0f}' \
-               f'{" tag="+str(self.__tag) if self.__tag is not None else ""}>'
+        return (
+            f'<Trade size={self.__size} time={self.__entry_bar}-{self.__exit_bar or ""} '
+            f'price={self.__entry_price}-{self.__exit_price or ""} pl={self.pl:.0f}'
+            f'{" tag="+str(self.__tag) if self.__tag is not None else ""}>'
+        )
 
     def _replace(self, **kwargs):
         for k, v in kwargs.items():
-            setattr(self, f'_{self.__class__.__qualname__}__{k}', v)
+            setattr(self, f"_{self.__class__.__qualname__}__{k}", v)
         return self
 
     def _copy(self, **kwargs):
         return copy(self)._replace(**kwargs)
 
-    def close(self, portion: float = 1., finalize=False):
+    def close(self, portion: float = 1.0, finalize=False):
         """Place new `Order` to close `portion` of the trade at next market price."""
-        assert 0 < portion < 1.000000000000001, "portion must be a fraction between 0 and 1"
+        assert (
+            0 < portion < 1.000000000000001
+        ), "portion must be a fraction between 0 and 1"
         size = copysign(max(1, round(abs(self.__size) * portion)), -self.__size)
-        order = Order(self.__broker, self.__ticker, size, parent_trade=self,
-                      entry_time=self.__broker.now, tag=self.__tag)
+        order = Order(
+            self.__broker,
+            self.__ticker,
+            size,
+            parent_trade=self,
+            entry_time=self.__broker.now,
+            tag=self.__tag,
+        )
         if finalize:
             return order
         else:
@@ -1293,7 +1448,11 @@ class Trade:
     def pl_pct(self):
         """Trade profit (positive) or loss (negative) in percent."""
         price = self.__exit_price or self.__broker.last_price(self.__ticker)
-        return copysign(1, self.__size) * (price / self.__entry_price - 1) if self.__entry_price != 0 else np.nan
+        return (
+            copysign(1, self.__size) * (price / self.__entry_price - 1)
+            if self.__entry_price != 0
+            else np.nan
+        )
 
     @property
     def value(self):
@@ -1329,7 +1488,7 @@ class Trade:
 
     @sl.setter
     def sl(self, price: float):
-        self.__set_contingent('sl', price)
+        self.__set_contingent("sl", price)
 
     @property
     def tp(self):
@@ -1344,28 +1503,46 @@ class Trade:
 
     @tp.setter
     def tp(self, price: float):
-        self.__set_contingent('tp', price)
+        self.__set_contingent("tp", price)
 
     def __set_contingent(self, type, price):
-        assert type in ('sl', 'tp')
+        assert type in ("sl", "tp")
         assert price is None or 0 < price < np.inf
-        attr = f'_{self.__class__.__qualname__}__{type}_order'
+        attr = f"_{self.__class__.__qualname__}__{type}_order"
         order: Order = getattr(self, attr)
         if order:
             order.cancel()
         if price:
-            kwargs = {'stop': price} if type == 'sl' else {'limit': price}
-            order = self.__broker.new_order(self.ticker, -self.size, trade=self, tag=self.tag, **kwargs)
+            kwargs = {"stop": price} if type == "sl" else {"limit": price}
+            order = self.__broker.new_order(
+                self.ticker, -self.size, trade=self, tag=self.tag, **kwargs
+            )
             setattr(self, attr, order)
 
 
 class _Broker:
-    def __init__(self, *, data: _Data, cash, holding, commission, margin, trade_on_close, hedging, exclusive_orders,
-                 trade_start_date, lot_size, fail_fast, storage, separate_commission: bool = False):
+    def __init__(
+        self,
+        *,
+        data: _Data,
+        cash,
+        holding,
+        commission,
+        margin,
+        trade_on_close,
+        hedging,
+        exclusive_orders,
+        trade_start_date,
+        lot_size,
+        fail_fast,
+        storage,
+        separate_commission: bool = False,
+    ):
         assert 0 < cash, f"cash should be >0, is {cash}"
-        assert -.1 <= commission < .1, \
-            ("commission should be between -10% "
-             f"(e.g. market-maker's rebates) and 10% (fees), is {commission}")
+        assert -0.1 <= commission < 0.1, (
+            "commission should be between -10% "
+            f"(e.g. market-maker's rebates) and 10% (fees), is {commission}"
+        )
         assert 0 < margin <= 1, f"margin should be between 0 and 1, is {margin}"
         self._data = data
         self._cash = cash
@@ -1375,42 +1552,73 @@ class _Broker:
         self._trade_on_close = trade_on_close
         self._hedging = hedging
         self._exclusive_orders = exclusive_orders
-        self._trade_start_date = trade_start_date   # datetime with no tz
+        self._trade_start_date = trade_start_date  # datetime with no tz
         self._lot_size = lot_size
         self._fail_fast = fail_fast
         self._storage = storage
         self._separate_commission = bool(separate_commission)
 
-        self._equity = np.tile(np.nan, (len(data.index), len(data.tickers)+2))
+        self._equity = np.tile(np.nan, (len(data.index), len(data.tickers) + 2))
         self.orders: List[Order] = []
-        self.trades: Dict[str, List[Trade]] = {ticker: [] for ticker in self._data.tickers}
-        self._trade_start_bar = min(
-            (self._data.index.tz_localize(None) < self._trade_start_date).sum(),
-            len(self._data)-1) if self._trade_start_date else 0
+        self.trades: Dict[str, List[Trade]] = {
+            ticker: [] for ticker in self._data.tickers
+        }
+        self._trade_start_bar = (
+            min(
+                (self._data.index.tz_localize(None) < self._trade_start_date).sum(),
+                len(self._data) - 1,
+            )
+            if self._trade_start_date
+            else 0
+        )
         # Handle preexisting positions as if they are acquired on the first bar but
         # at the close price of trade_start_date, so that the portfolio return is 0
         # between backtest start date and trade_start_date.
         if self._holding:
             for ticker, size in self._holding.items():
                 if size:
-                    self.trades[ticker].append(Trade(self, ticker=ticker, size=size, entry_price=self._data[
-                        ticker, 'Close'][self._trade_start_bar], entry_bar=0, tag='preexisting'))
+                    self.trades[ticker].append(
+                        Trade(
+                            self,
+                            ticker=ticker,
+                            size=size,
+                            entry_price=self._data[ticker, "Close"][
+                                self._trade_start_bar
+                            ],
+                            entry_bar=0,
+                            tag="preexisting",
+                        )
+                    )
                     # add the cost for preexisting positions to initial cash
-                    self._cash += size * self._data[ticker, 'Close'][self._trade_start_bar]
-        self.positions: Dict[str, Position] = {ticker: Position(self, ticker) for ticker in self._data.tickers}
+                    self._cash += (
+                        size * self._data[ticker, "Close"][self._trade_start_bar]
+                    )
+        self.positions: Dict[str, Position] = {
+            ticker: Position(self, ticker) for ticker in self._data.tickers
+        }
         self.closed_trades: List[Trade] = []
 
     def __repr__(self):
-        pos = ','.join([f'{k}:{p.size}' for k, p in self.positions.items()])
-        return f'<Broker: margin_available:{self.margin_available:.0f},{pos} ({len(self.all_trades)} trades)>'
+        pos = ",".join([f"{k}:{p.size}" for k, p in self.positions.items()])
+        return f"<Broker: margin_available:{self.margin_available:.0f},{pos} ({len(self.all_trades)} trades)>"
 
-    def rebalance(self, alloc: Allocation, force: bool = False, rtol: float = 0.01, atol: int = 0, cash_reserve: float = 0.1):
+    def rebalance(
+        self,
+        alloc: Allocation,
+        force: bool = False,
+        rtol: float = 0.01,
+        atol: int = 0,
+        cash_reserve: float = 0.1,
+    ):
         assert 0 <= cash_reserve < 1, "cash_reserve should be between 0 and 1"
         assert 0 <= rtol < 1, "rtol should be between 0 and 1"
         assert 0 <= atol, "atol should be non-negative"
 
         # ignore any trade actions before trade_start_date
-        if self._trade_start_date and self.now.replace(tzinfo=None) < self._trade_start_date:
+        if (
+            self._trade_start_date
+            and self.now.replace(tzinfo=None) < self._trade_start_date
+        ):
             alloc._clear()
             return
         # rebalance if force rebalance is true or portfolio weights have changed
@@ -1420,8 +1628,10 @@ class _Broker:
             # desired values for each ticker excluding cash reserve that is not to be allocated
             value_allocation = alloc.weights * total_equity * (1 - cash_reserve)
             # calculate the amount to buy or sell
-            current_value = pd.Series([self.equity(ticker)
-                                       for ticker in self._data.tickers], index=self._data.tickers)
+            current_value = pd.Series(
+                [self.equity(ticker) for ticker in self._data.tickers],
+                index=self._data.tickers,
+            )
             value_diff = value_allocation - current_value
             value_diff_abs = value_diff.abs().sum()
             value_diff_rel = value_diff_abs / total_equity
@@ -1436,31 +1646,43 @@ class _Broker:
                 else:
                     # rebalance if the current value deviate too much from the desired value
                     # this is to avoid tiny orders triggered by ticker price fluctuation
-                    if value_diff[ticker] and (atol and value_diff_abs > atol or value_diff_rel > rtol):
+                    if value_diff[ticker] and (
+                        atol and value_diff_abs > atol or value_diff_rel > rtol
+                    ):
                         # calculate number of shares to buy respecting lot_size
                         # implicitly this forces order in whole share, fractional share not supported for now
-                        size = value_diff[ticker] // self.last_price(ticker) // self._lot_size * self._lot_size
+                        size = (
+                            value_diff[ticker]
+                            // self.last_price(ticker)
+                            // self._lot_size
+                            * self._lot_size
+                        )
                         if size != 0:
                             self.new_order(ticker=ticker, size=size)
         alloc._next()
 
-    def new_order(self,
-                  ticker: str,
-                  size: float,
-                  limit: Optional[float] = None,
-                  stop: Optional[float] = None,
-                  sl: Optional[float] = None,
-                  tp: Optional[float] = None,
-                  tag: object = None,
-                  *,
-                  trade: Optional[Trade] = None):
+    def new_order(
+        self,
+        ticker: str,
+        size: float,
+        limit: Optional[float] = None,
+        stop: Optional[float] = None,
+        sl: Optional[float] = None,
+        tp: Optional[float] = None,
+        tag: object = None,
+        *,
+        trade: Optional[Trade] = None,
+    ):
         """
         Argument size indicates whether the order is long or short
         """
         ticker = ticker or self._data.the_ticker
 
         # ignore any trade actions before trade_start_date
-        if self._trade_start_date and self.now.replace(tzinfo=None) < self._trade_start_date:
+        if (
+            self._trade_start_date
+            and self.now.replace(tzinfo=None) < self._trade_start_date
+        ):
             return
 
         size = float(size)
@@ -1476,12 +1698,14 @@ class _Broker:
             if not (sl or -np.inf) < (limit or stop or adjusted_price) < (tp or np.inf):
                 raise ValueError(
                     "Long orders require: "
-                    f"SL ({sl}) < LIMIT ({limit or stop or adjusted_price}) < TP ({tp})")
+                    f"SL ({sl}) < LIMIT ({limit or stop or adjusted_price}) < TP ({tp})"
+                )
         else:
             if not (tp or -np.inf) < (limit or stop or adjusted_price) < (sl or np.inf):
                 raise ValueError(
                     "Short orders require: "
-                    f"TP ({tp}) < LIMIT ({limit or stop or adjusted_price}) < SL ({sl})")
+                    f"TP ({tp}) < LIMIT ({limit or stop or adjusted_price}) < SL ({sl})"
+                )
 
         order = Order(self, ticker, size, limit, stop, sl, tp, trade, self.now, tag=tag)
         # Put the new order in the order queue,
@@ -1503,8 +1727,8 @@ class _Broker:
         return order
 
     def last_price(self, ticker) -> float:
-        """ Price at the last (current) close. """
-        return self._data[ticker, 'Close'][-1]
+        """Price at the last (current) close."""
+        return self._data[ticker, "Close"][-1]
 
     def _adjusted_price(self, ticker: str, size=None, price=None) -> float:
         """
@@ -1512,7 +1736,7 @@ class _Broker:
         In long positions, the adjusted price is a fraction higher, and vice versa.
         """
         # If separating commission from price, do not embed commission into the fill price
-        base_price = (price or self.last_price(ticker))
+        base_price = price or self.last_price(ticker)
         if self._separate_commission:
             return base_price
         return base_price * (1 + copysign(self._commission, size))
@@ -1527,7 +1751,9 @@ class _Broker:
     @property
     def margin_available(self) -> float:
         # From https://github.com/QuantConnect/Lean/pull/3768
-        margin_used = sum(abs(trade.value) / self._leverage for trade in self.all_trades)
+        margin_used = sum(
+            abs(trade.value) / self._leverage for trade in self.all_trades
+        )
         return max(0, self.equity() - margin_used)
 
     @property
@@ -1554,7 +1780,9 @@ class _Broker:
             size = copysign(min(abs(_prev_size), abs(order.size)), order.size)
             if trade in self.trades[order.ticker]:
                 self._reduce_trade(trade, price, size, time_index)
-                assert order.size != -_prev_size or trade not in self.trades[order.ticker]
+                assert (
+                    order.size != -_prev_size or trade not in self.trades[order.ticker]
+                )
 
     def next(self):
         i = len(self._data) - 1
@@ -1584,10 +1812,11 @@ class _Broker:
 
             data = self._data
             open_, high, low = (
-                data[order.ticker, 'Open'][-1],
-                data[order.ticker, 'High'][-1],
-                data[order.ticker, 'Low'][-1])
-            prev_close = data[order.ticker, 'Close'][-2]
+                data[order.ticker, "Open"][-1],
+                data[order.ticker, "High"][-1],
+                data[order.ticker, "Low"][-1],
+            )
+            prev_close = data[order.ticker, "Close"][-2]
 
             # Related SL/TP order was already removed
             if order not in self.orders:
@@ -1596,7 +1825,9 @@ class _Broker:
             # Check if stop condition was hit
             stop_price = order.stop
             if stop_price:
-                is_stop_hit = ((high > stop_price) if order.is_long else (low < stop_price))
+                is_stop_hit = (
+                    (high > stop_price) if order.is_long else (low < stop_price)
+                )
                 if not is_stop_hit:
                     continue
 
@@ -1607,26 +1838,33 @@ class _Broker:
             # Determine purchase price.
             # Check if limit order can be filled.
             if order.limit:
-                is_limit_hit = low < order.limit if order.is_long else high > order.limit
+                is_limit_hit = (
+                    low < order.limit if order.is_long else high > order.limit
+                )
                 # When stop and limit are hit within the same bar, we pessimistically
                 # assume limit was hit before the stop (i.e. "before it counts")
-                is_limit_hit_before_stop = (is_limit_hit and
-                                            (order.limit < (stop_price or -np.inf)
-                                             if order.is_long
-                                             else order.limit > (stop_price or np.inf)))
+                is_limit_hit_before_stop = is_limit_hit and (
+                    order.limit < (stop_price or -np.inf)
+                    if order.is_long
+                    else order.limit > (stop_price or np.inf)
+                )
                 if not is_limit_hit or is_limit_hit_before_stop:
                     continue
 
                 # stop_price, if set, was hit within this bar
-                price = (min(stop_price or open_, order.limit)
-                         if order.is_long else
-                         max(stop_price or open_, order.limit))
+                price = (
+                    min(stop_price or open_, order.limit)
+                    if order.is_long
+                    else max(stop_price or open_, order.limit)
+                )
             else:
                 # Market-if-touched / market order
                 price = prev_close if self._trade_on_close else open_
-                price = (max(price, stop_price or -np.inf)
-                         if order.is_long else
-                         min(price, stop_price or np.inf))
+                price = (
+                    max(price, stop_price or -np.inf)
+                    if order.is_long
+                    else min(price, stop_price or np.inf)
+                )
 
             # Determine entry/exit bar index
             is_market_order = not order.limit and not stop_price
@@ -1653,7 +1891,10 @@ class _Broker:
                 # If this trade isn't already closed (e.g. on multiple `trade.close(.5)` calls)
                 if trade in self.trades[order.ticker]:
                     self._reduce_trade(trade, price, size, time_index)
-                    assert order.size != -_prev_size or trade not in self.trades[order.ticker]
+                    assert (
+                        order.size != -_prev_size
+                        or trade not in self.trades[order.ticker]
+                    )
                 if order in (trade._sl_order, trade._tp_order):
                     assert order.size == -trade.size
                     assert order not in self.orders  # Removed when trade was closed
@@ -1673,8 +1914,13 @@ class _Broker:
             # precompute true size in units, accounting for margin and spread/commissions
             size = order.size
             if -1 < size < 1:
-                size = copysign(int((self.margin_available * self._leverage * abs(size))
-                                    // adjusted_price), size)
+                size = copysign(
+                    int(
+                        (self.margin_available * self._leverage * abs(size))
+                        // adjusted_price
+                    ),
+                    size,
+                )
                 # Not enough cash/margin even for a single unit
                 if not size:
                     self.orders.remove(order)
@@ -1712,15 +1958,24 @@ class _Broker:
             if abs(need_size) * adjusted_price > self.margin_available * self._leverage:
                 if self._fail_fast:
                     raise RuntimeError(
-                        f'Not enough liquidity for {order}, has {int(self.margin_available * self._leverage)},'
-                        f' needs {int(abs(need_size) * adjusted_price)}, aborting')
+                        f"Not enough liquidity for {order}, has {int(self.margin_available * self._leverage)},"
+                        f" needs {int(abs(need_size) * adjusted_price)}, aborting"
+                    )
                 else:
                     self.orders.remove(order)
                     continue
 
             # Open a new trade
             if need_size:
-                self._open_trade(order.ticker, adjusted_price, need_size, order.sl, order.tp, time_index, order.tag)
+                self._open_trade(
+                    order.ticker,
+                    adjusted_price,
+                    need_size,
+                    order.sl,
+                    order.tp,
+                    time_index,
+                    order.tag,
+                )
 
                 # We need to reprocess the SL/TP orders newly added to the queue.
                 # This allows e.g. SL hitting in the same bar the order was open.
@@ -1728,8 +1983,10 @@ class _Broker:
                 if order.sl or order.tp:
                     if is_market_order:
                         reprocess_orders = True
-                    elif (low <= (order.sl or -np.inf) <= high or
-                          low <= (order.tp or -np.inf) <= high):
+                    elif (
+                        low <= (order.sl or -np.inf) <= high
+                        or low <= (order.tp or -np.inf) <= high
+                    ):
                         warnings.warn(
                             f"({data.index[-1]}) A contingent SL/TP order would execute in the "
                             "same bar its parent stop/limit order was turned into a trade. "
@@ -1738,7 +1995,8 @@ class _Broker:
                             "the next (matching) price/bar, making the result (of this trade) "
                             "somewhat dubious. "
                             "See https://github.com/kernc/backtesting.py/issues/119",
-                            UserWarning)
+                            UserWarning,
+                        )
 
             # Order processed
             self.orders.remove(order)
@@ -1781,15 +2039,26 @@ class _Broker:
             exit_commission = abs(trade.size) * price * abs(self._commission)
 
         # Record commissions on the trade and move to closed_trades
-        closed = trade._replace(exit_price=price, exit_bar=time_index,
-                                exit_commission=(trade.exit_commission or 0.0) + exit_commission)
+        closed = trade._replace(
+            exit_price=price,
+            exit_bar=time_index,
+            exit_commission=(trade.exit_commission or 0.0) + exit_commission,
+        )
         self.closed_trades.append(closed)
 
         # Update cash by gross PnL minus exit commission
         self._cash += trade.pl - exit_commission
 
-    def _open_trade(self, ticker: str, price: float, size: int,
-                    sl: Optional[float], tp: Optional[float], time_index: int, tag):
+    def _open_trade(
+        self,
+        ticker: str,
+        price: float,
+        size: int,
+        sl: Optional[float],
+        tp: Optional[float],
+        time_index: int,
+        tag,
+    ):
         trade = Trade(self, ticker, size, price, time_index, tag)
         self.trades[ticker].append(trade)
         # Compute and record entry commission if separating commission
@@ -1797,7 +2066,9 @@ class _Broker:
             entry_commission = abs(size) * price * abs(self._commission)
             # reduce cash immediately by entry commission
             self._cash -= entry_commission
-            trade._replace(entry_commission=(trade.entry_commission or 0.0) + entry_commission)
+            trade._replace(
+                entry_commission=(trade.entry_commission or 0.0) + entry_commission
+            )
         # Create SL/TP (bracket) orders.
         # Make sure SL order is created first so it gets adversarially processed before TP order
         # in case of an ambiguous tie (both hit within a single bar).
@@ -1819,28 +2090,29 @@ class Backtest:
     optimize it.
     """
 
-    def __init__(self,
-                 data: pd.DataFrame,
-                 strategy: Type[Strategy],
-                 *,
-                 cash: float = 10_000,
-                 holding: dict = {},
-                 commission: float = .0,
-                 margin: float = 1.,
-                 trade_on_close=False,
-                 hedging=False,
-                 exclusive_orders=False,
-                 trade_start_date=None,
-                 lot_size=1,
-                 fail_fast=True,
-                 storage: dict | None = None,
-                 separate_commission: bool = False,
-                 ):
+    def __init__(
+        self,
+        data: pd.DataFrame,
+        strategy: Type[Strategy],
+        *,
+        cash: float = 10_000,
+        holding: dict = {},
+        commission: float = 0.0,
+        margin: float = 1.0,
+        trade_on_close=False,
+        hedging=False,
+        exclusive_orders=False,
+        trade_start_date=None,
+        lot_size=1,
+        fail_fast=True,
+        storage: dict | None = None,
+        separate_commission: bool = False,
+    ):
         """
         Initialize a backtest. Requires data and a strategy to test.
 
         `data` is a `pd.DataFrame` with 2-level columns:
-        1st level is a list of tickers, and 
+        1st level is a list of tickers, and
         2nd level is `Open`, `High`, `Low`, `Close`, and `Volume`.
         If the strategy works only on one asset, the 1st level can be dropped.
         If any columns are missing, set them to what you have available,
@@ -1859,8 +2131,8 @@ class Backtest:
 
         `cash` is the initial cash to start with.
 
-        `holding` is a mapping of preexisting assets and their sizes before 
-        backtest begins, e.g. 
+        `holding` is a mapping of preexisting assets and their sizes before
+        backtest begins, e.g.
 
             {'AAPL': 10, 'MSFT': 5}
 
@@ -1890,76 +2162,109 @@ class Backtest:
         If `trade_start_date` is not None, orders generated before the date are
         surpressed and ignored in backtesting.
 
-        `lot_size` is the minimum increment of shares you buy in one order. Order 
+        `lot_size` is the minimum increment of shares you buy in one order. Order
         size will be rounded to integer multiples during rebalance.
 
         `fail_fast`, when True, instructs the backtester to bail out when
         cash is not enough to cover an order. This can be used in live trading
-        to detect issues early. If False, backtesting will ignore the order and 
+        to detect issues early. If False, backtesting will ignore the order and
         continue, which can be convenient during algorithm research.
 
-        `storage`, when not None, is a dictionary that contains saved states from 
-        past runs. Modification to storage is persisted and can be made available 
-        for future runs. 
+        `storage`, when not None, is a dictionary that contains saved states from
+        past runs. Modification to storage is persisted and can be made available
+        for future runs.
 
         [FIFO]: https://www.investopedia.com/terms/n/nfa-compliance-rule-2-43b.asp
         """
 
         if not (isinstance(strategy, type) and issubclass(strategy, Strategy)):
-            raise TypeError(f'`strategy` must be a Strategy sub-type. Got {type(strategy)}')
+            raise TypeError(
+                f"`strategy` must be a Strategy sub-type. Got {type(strategy)}"
+            )
         if not isinstance(data, pd.DataFrame):
             raise TypeError("`data` must be a pandas.DataFrame with columns")
         if not isinstance(commission, Number):
-            raise TypeError('`commission` must be a float value, percent of '
-                            'entry order price')
+            raise TypeError(
+                "`commission` must be a float value, percent of " "entry order price"
+            )
 
         data = data.copy(deep=False)
-        ohlc = ['Open', 'High', 'Low', 'Close']
+        ohlc = ["Open", "High", "Low", "Close"]
 
         # Convert single asset data into 2-level column index
         if data.columns.nlevels == 1:
-            data.columns = pd.MultiIndex.from_product([['Asset'], data.columns])
+            data.columns = pd.MultiIndex.from_product([["Asset"], data.columns])
 
         # Convert index to datetime index
-        if (not isinstance(data.index, pd.DatetimeIndex) and
-            not isinstance(data.index, pd.RangeIndex) and
+        if (
+            not isinstance(data.index, pd.DatetimeIndex)
+            and not isinstance(data.index, pd.RangeIndex)
+            and
             # Numeric index with most large numbers
-            (data.index.is_numeric() and
-             (data.index > pd.Timestamp('1975').timestamp()).mean() > .8)):
+            (
+                data.index.is_numeric()
+                and (data.index > pd.Timestamp("1975").timestamp()).mean() > 0.8
+            )
+        ):
             try:
                 data.index = pd.to_datetime(data.index, infer_datetime_format=True)
             except ValueError:
                 pass
         if not set(data.columns.levels[1]).issuperset(set(ohlc)):
-            raise ValueError("`data` must be a pandas.DataFrame containing columns 'Open', 'High', 'Low', 'Close'")
+            raise ValueError(
+                "`data` must be a pandas.DataFrame containing columns 'Open', 'High', 'Low', 'Close'"
+            )
         if len(data) == 0:
             raise ValueError("`data` cannot be empty")
-        if np.any(data.xs('Close', axis=1, level=1) > cash):
-            warnings.warn('Some prices are larger than initial cash value. Note that fractional '
-                          'trading is not supported. If you want to trade Bitcoin, '
-                          'increase initial cash, or trade μBTC or satoshis instead (GH-134).',
-                          stacklevel=2)
+        if np.any(data.xs("Close", axis=1, level=1) > cash):
+            warnings.warn(
+                "Some prices are larger than initial cash value. Note that fractional "
+                "trading is not supported. If you want to trade Bitcoin, "
+                "increase initial cash, or trade μBTC or satoshis instead (GH-134).",
+                stacklevel=2,
+            )
         if not data.index.is_monotonic_increasing:
-            warnings.warn('Data index is not sorted in ascending order. Sorting.',
-                          stacklevel=2)
+            warnings.warn(
+                "Data index is not sorted in ascending order. Sorting.", stacklevel=2
+            )
             data = data.sort_index()
-        if data.loc[:, (slice(None), ohlc)].apply(lambda s: s.loc[s.first_valid_index():].isna().sum()).sum() > 0:
-            raise ValueError('Some OHLC values are missing (NaN). '
-                             'Please strip those lines with `df.dropna()` or '
-                             'fill them in with `df.interpolate()` or whatever.')
+        if (
+            data.loc[:, (slice(None), ohlc)]
+            .apply(lambda s: s.loc[s.first_valid_index() :].isna().sum())
+            .sum()
+            > 0
+        ):
+            raise ValueError(
+                "Some OHLC values are missing (NaN). "
+                "Please strip those lines with `df.dropna()` or "
+                "fill them in with `df.interpolate()` or whatever."
+            )
         if not isinstance(data.index, pd.DatetimeIndex):
-            warnings.warn('Data index is not datetime. Assuming simple periods, '
-                          'but `pd.DateTimeIndex` is advised.',
-                          stacklevel=2)
-        data.index.name = 'Date'
+            warnings.warn(
+                "Data index is not datetime. Assuming simple periods, "
+                "but `pd.DateTimeIndex` is advised.",
+                stacklevel=2,
+            )
+        data.index.name = "Date"
 
         self._data = data
         self._broker = partial(
-            _Broker, cash=cash, holding=holding, commission=commission, margin=margin,
-            trade_on_close=trade_on_close, hedging=hedging,
+            _Broker,
+            cash=cash,
+            holding=holding,
+            commission=commission,
+            margin=margin,
+            trade_on_close=trade_on_close,
+            hedging=hedging,
             exclusive_orders=exclusive_orders,
-            trade_start_date=datetime.strptime(trade_start_date, '%Y-%m-%d') if trade_start_date else None,
-            lot_size=lot_size, fail_fast=fail_fast, storage=storage,
+            trade_start_date=(
+                datetime.strptime(trade_start_date, "%Y-%m-%d")
+                if trade_start_date
+                else None
+            ),
+            lot_size=lot_size,
+            fail_fast=fail_fast,
+            storage=storage,
             separate_commission=separate_commission,
         )
         self._strategy = strategy
@@ -2033,35 +2338,62 @@ class Backtest:
         try:
             strategy.init()
         except Exception as e:
-            print('Strategy initialization throws exception', e)
+            print("Strategy initialization throws exception", e)
             print(traceback.format_exc())
             return
 
         # Indicators used in Strategy.next()
-        indicator_attrs = {attr: indicator for attr, indicator in strategy.__dict__.items()
-                           if any([indicator is item for item in strategy._indicators])}
+        indicator_attrs = {
+            attr: indicator
+            for attr, indicator in strategy.__dict__.items()
+            if any([indicator is item for item in strategy._indicators])
+        }
 
         # Skip first few candles where indicators are still "warming up"
-        start = min((indicator.isna().any(axis=1).argmin() if isinstance(indicator, pd.DataFrame)
-                     else indicator.isna().argmin() for indicator in indicator_attrs.values()), default=0)
+        start = min(
+            (
+                (
+                    indicator.isna().any(axis=1).argmin()
+                    if isinstance(indicator, pd.DataFrame)
+                    else indicator.isna().argmin()
+                )
+                for indicator in indicator_attrs.values()
+            ),
+            default=0,
+        )
         start = max(start, strategy._start_on_day)
 
         # Preprocess indicators to numpy array for better performance
-        def deframe(df): return df.iloc[:, 0] if isinstance(df, pd.DataFrame) and len(df.columns) == 1 else df
-        indicator_attrs_np = {attr: deframe(indicator).to_numpy() for attr, indicator in indicator_attrs.items()}
+        def deframe(df):
+            return (
+                df.iloc[:, 0]
+                if isinstance(df, pd.DataFrame) and len(df.columns) == 1
+                else df
+            )
+
+        indicator_attrs_np = {
+            attr: deframe(indicator).to_numpy()
+            for attr, indicator in indicator_attrs.items()
+        }
 
         # Disable "invalid value encountered in ..." warnings. Comparison
         # np.nan >= 3 is not invalid; it's False.
-        with np.errstate(invalid='ignore'):
+        with np.errstate(invalid="ignore"):
 
             for i in range(start, len(self._data)):
                 # Prepare data and indicators for `next` call
                 data._set_length(i + 1)
                 for attr, indicator in indicator_attrs_np.items():
-                    setattr(strategy, attr,
-                            _Indicator(
-                                array=indicator[: i + 1],
-                                df=partial(_Indicator.lazy_indexing, indicator_attrs[attr], i + 1)))
+                    setattr(
+                        strategy,
+                        attr,
+                        _Indicator(
+                            array=indicator[: i + 1],
+                            df=partial(
+                                _Indicator.lazy_indexing, indicator_attrs[attr], i + 1
+                            ),
+                        ),
+                    )
 
                 # Handle orders processing and broker stuff
                 try:
@@ -2077,8 +2409,9 @@ class Backtest:
             else:
 
                 # take note of the final positions
-                final_positions = ({t: p.size for t, p in broker.positions.items()}
-                                   | {'Cash': int(broker.margin_available)})
+                final_positions = {t: p.size for t, p in broker.positions.items()} | {
+                    "Cash": int(broker.margin_available)
+                }
 
                 if start < len(self._data):
                     broker.finalize()
@@ -2087,8 +2420,15 @@ class Backtest:
             # for future `indicator._opts['data'].index` calls to work
             data._set_length(len(self._data))
 
-            equity = pd.DataFrame(broker._equity, index=data.index,
-                                  columns=['Equity', *data.tickers, 'Cash']).bfill().fillna(broker._cash)
+            equity = (
+                pd.DataFrame(
+                    broker._equity,
+                    index=data.index,
+                    columns=["Equity", *data.tickers, "Cash"],
+                )
+                .bfill()
+                .fillna(broker._cash)
+            )
 
             self._results = compute_stats(
                 orders=processed_orders,
@@ -2103,17 +2443,20 @@ class Backtest:
 
         return self._results.copy()
 
-    def optimize(self, *,
-                 maximize: Union[str, Callable[[pd.Series], float]] = 'SQN',
-                 method: str = 'grid',
-                 max_tries: Optional[Union[int, float]] = None,
-                 constraint: Optional[Callable[[dict], bool]] = None,
-                 return_heatmap: bool = False,
-                 return_optimization: bool = False,
-                 random_state: Optional[int] = None,
-                 **kwargs) -> Union[pd.Series,
-                                    Tuple[pd.Series, pd.Series],
-                                    Tuple[pd.Series, pd.Series, dict]]:
+    def optimize(
+        self,
+        *,
+        maximize: Union[str, Callable[[pd.Series], float]] = "SQN",
+        method: str = "grid",
+        max_tries: Optional[Union[int, float]] = None,
+        constraint: Optional[Callable[[dict], bool]] = None,
+        return_heatmap: bool = False,
+        return_optimization: bool = False,
+        random_state: Optional[int] = None,
+        **kwargs,
+    ) -> Union[
+        pd.Series, Tuple[pd.Series, pd.Series], Tuple[pd.Series, pd.Series, dict]
+    ]:
         """
         Optimize strategy parameters to an optimal combination.
         Returns result `pd.Series` of the best run.
@@ -2179,23 +2522,27 @@ class Backtest:
             Improve multiprocessing/parallel execution on Windos with start method 'spawn'.
         """
         if not kwargs:
-            raise ValueError('Need some strategy parameters to optimize')
+            raise ValueError("Need some strategy parameters to optimize")
 
         maximize_key = None
         if isinstance(maximize, str):
             maximize_key = str(maximize)
             stats = self._results if self._results is not None else self.run()
             if maximize not in stats:
-                raise ValueError('`maximize`, if str, must match a key in pd.Series '
-                                 'result of backtest.run()')
+                raise ValueError(
+                    "`maximize`, if str, must match a key in pd.Series "
+                    "result of backtest.run()"
+                )
 
             def maximize(stats: pd.Series, _key=maximize):
                 return stats[_key]
 
         elif not callable(maximize):
-            raise TypeError('`maximize` must be str (a field of backtest.run() result '
-                            'Series) or a function that accepts result Series '
-                            'and returns a number; the higher the better')
+            raise TypeError(
+                "`maximize` must be str (a field of backtest.run() result "
+                "Series) or a function that accepts result Series "
+                "and returns a number; the higher the better"
+            )
         assert callable(maximize), maximize
 
         have_constraint = bool(constraint)
@@ -2205,12 +2552,14 @@ class Backtest:
                 return True
 
         elif not callable(constraint):
-            raise TypeError("`constraint` must be a function that accepts a dict "
-                            "of strategy parameters and returns a bool whether "
-                            "the combination of parameters is admissible or not")
+            raise TypeError(
+                "`constraint` must be a function that accepts a dict "
+                "of strategy parameters and returns a bool whether "
+                "the combination of parameters is admissible or not"
+            )
         assert callable(constraint), constraint
 
-        if return_optimization and method != 'skopt':
+        if return_optimization and method != "skopt":
             raise ValueError("return_optimization=True only valid if method='skopt'")
 
         def _tuple(x):
@@ -2218,8 +2567,10 @@ class Backtest:
 
         for k, v in kwargs.items():
             if len(_tuple(v)) == 0:
-                raise ValueError(f"Optimization variable '{k}' is passed no "
-                                 f"optimization values: {k}={v}")
+                raise ValueError(
+                    f"Optimization variable '{k}' is passed no "
+                    f"optimization values: {k}={v}"
+                )
 
         class AttrDict(dict):
             def __getattr__(self, item):
@@ -2228,39 +2579,54 @@ class Backtest:
         def _grid_size():
             size = int(np.prod([len(_tuple(v)) for v in kwargs.values()]))
             if size < 10_000 and have_constraint:
-                size = sum(1 for p in product(*(zip(repeat(k), _tuple(v))
-                                                for k, v in kwargs.items()))
-                           if constraint(AttrDict(p)))
+                size = sum(
+                    1
+                    for p in product(
+                        *(zip(repeat(k), _tuple(v)) for k, v in kwargs.items())
+                    )
+                    if constraint(AttrDict(p))
+                )
             return size
 
         def _optimize_grid() -> Union[pd.Series, Tuple[pd.Series, pd.Series]]:
             rand = default_rng(random_state).random
-            grid_frac = (1 if max_tries is None else
-                         max_tries if 0 < max_tries <= 1 else
-                         max_tries / _grid_size())
-            param_combos = [dict(params)  # back to dict so it pickles
-                            for params in (AttrDict(params)
-                                           for params in product(*(zip(repeat(k), _tuple(v))
-                                                                   for k, v in kwargs.items())))
-                            if constraint(params)  # type: ignore
-                            and rand() <= grid_frac]
+            grid_frac = (
+                1
+                if max_tries is None
+                else max_tries if 0 < max_tries <= 1 else max_tries / _grid_size()
+            )
+            param_combos = [
+                dict(params)  # back to dict so it pickles
+                for params in (
+                    AttrDict(params)
+                    for params in product(
+                        *(zip(repeat(k), _tuple(v)) for k, v in kwargs.items())
+                    )
+                )
+                if constraint(params) and rand() <= grid_frac  # type: ignore
+            ]
             if not param_combos:
-                raise ValueError('No admissible parameter combinations to test')
+                raise ValueError("No admissible parameter combinations to test")
 
             if len(param_combos) > 1000:
-                warnings.warn(f'Searching for best of {len(param_combos)} configurations.',
-                              stacklevel=2)
+                warnings.warn(
+                    f"Searching for best of {len(param_combos)} configurations.",
+                    stacklevel=2,
+                )
 
-            heatmap = pd.Series(np.nan,
-                                name=maximize_key,
-                                index=pd.MultiIndex.from_tuples(
-                                    [p.values() for p in param_combos],
-                                    names=next(iter(param_combos)).keys()))
+            heatmap = pd.Series(
+                np.nan,
+                name=maximize_key,
+                index=pd.MultiIndex.from_tuples(
+                    [p.values() for p in param_combos],
+                    names=next(iter(param_combos)).keys(),
+                ),
+            )
 
             def _batch(seq):
                 n = np.clip(int(len(seq) // (os.cpu_count() or 1)), 1, 300)
                 for i in range(0, len(seq), n):
-                    yield seq[i:i + n]
+                    yield seq[i : i + n]
 
             # Save necessary objects into "global" state; pass into concurrent executor
             # (and thus pickle) nothing but two numbers; receive nothing but numbers.
@@ -2273,19 +2639,28 @@ class Backtest:
                 # If multiprocessing start method is 'fork' (i.e. on POSIX), use
                 # a pool of processes to compute results in parallel.
                 # Otherwise (i.e. on Windos), sequential computation will be "faster".
-                if mp.get_start_method(allow_none=False) == 'fork':
+                if mp.get_start_method(allow_none=False) == "fork":
                     with ProcessPoolExecutor() as executor:
-                        futures = [executor.submit(Backtest._mp_task, backtest_uuid, i)
-                                   for i in range(len(param_batches))]
-                        for future in _tqdm(as_completed(futures), total=len(futures),
-                                            desc='Backtest.optimize'):
+                        futures = [
+                            executor.submit(Backtest._mp_task, backtest_uuid, i)
+                            for i in range(len(param_batches))
+                        ]
+                        for future in _tqdm(
+                            as_completed(futures),
+                            total=len(futures),
+                            desc="Backtest.optimize",
+                        ):
                             batch_index, values = future.result()
-                            for value, params in zip(values, param_batches[batch_index]):
+                            for value, params in zip(
+                                values, param_batches[batch_index]
+                            ):
                                 heatmap[tuple(params.values())] = value
                 else:
-                    if os.name == 'posix':
-                        warnings.warn("For multiprocessing support in `Backtest.optimize()` "
-                                      "set multiprocessing start method to 'fork'.")
+                    if os.name == "posix":
+                        warnings.warn(
+                            "For multiprocessing support in `Backtest.optimize()` "
+                            "set multiprocessing start method to 'fork'."
+                        )
                     for batch_index in _tqdm(range(len(param_batches))):
                         _, values = Backtest._mp_task(backtest_uuid, batch_index)
                         for value, params in zip(values, param_batches[batch_index]):
@@ -2306,9 +2681,11 @@ class Backtest:
                 return stats, heatmap
             return stats
 
-        def _optimize_skopt() -> Union[pd.Series,
-                                       Tuple[pd.Series, pd.Series],
-                                       Tuple[pd.Series, pd.Series, dict]]:
+        def _optimize_skopt() -> Union[
+            pd.Series,
+            Tuple[pd.Series, pd.Series],
+            Tuple[pd.Series, pd.Series, dict],
+        ]:
             try:
                 from skopt import forest_minimize
                 from skopt.callbacks import DeltaXStopper
@@ -2316,28 +2693,42 @@ class Backtest:
                 from skopt.space import Categorical, Integer, Real
                 from skopt.utils import use_named_args
             except ImportError:
-                raise ImportError("Need package 'scikit-optimize' for method='skopt'. "
-                                  "pip install scikit-optimize") from None
+                raise ImportError(
+                    "Need package 'scikit-optimize' for method='skopt'. "
+                    "pip install scikit-optimize"
+                ) from None
 
             nonlocal max_tries
-            max_tries = (200 if max_tries is None else
-                         max(1, int(max_tries * _grid_size())) if 0 < max_tries <= 1 else
-                         max_tries)
+            max_tries = (
+                200
+                if max_tries is None
+                else (
+                    max(1, int(max_tries * _grid_size()))
+                    if 0 < max_tries <= 1
+                    else max_tries
+                )
+            )
 
             dimensions = []
             for key, values in kwargs.items():
                 values = np.asarray(values)
-                if values.dtype.kind in 'mM':  # timedelta, datetime64
+                if values.dtype.kind in "mM":  # timedelta, datetime64
                     # these dtypes are unsupported in skopt, so convert to raw int
                     # TODO: save dtype and convert back later
                     values = values.astype(int)
 
-                if values.dtype.kind in 'iumM':
-                    dimensions.append(Integer(low=values.min(), high=values.max(), name=key))
-                elif values.dtype.kind == 'f':
-                    dimensions.append(Real(low=values.min(), high=values.max(), name=key))
+                if values.dtype.kind in "iumM":
+                    dimensions.append(
+                        Integer(low=values.min(), high=values.max(), name=key)
+                    )
+                elif values.dtype.kind == "f":
+                    dimensions.append(
+                        Real(low=values.min(), high=values.max(), name=key)
+                    )
                 else:
-                    dimensions.append(Categorical(values.tolist(), name=key, transform='onehot'))
+                    dimensions.append(
+                        Categorical(values.tolist(), name=key, transform="onehot")
+                    )
 
             # Avoid recomputing re-evaluations:
             # "The objective has been evaluated at this point before."
@@ -2346,9 +2737,11 @@ class Backtest:
 
             # np.inf/np.nan breaks sklearn, np.finfo(float).max breaks skopt.plots.plot_objective
             INVALID = 1e300
-            progress = iter(_tqdm(repeat(None), total=max_tries, desc='Backtest.optimize'))
+            progress = iter(
+                _tqdm(repeat(None), total=max_tries, desc="Backtest.optimize")
+            )
 
-            @ use_named_args(dimensions=dimensions)
+            @use_named_args(dimensions=dimensions)
             def objective_function(**params):
                 next(progress)
                 # Check constraints
@@ -2363,26 +2756,32 @@ class Backtest:
 
             with warnings.catch_warnings():
                 warnings.filterwarnings(
-                    'ignore', 'The objective has been evaluated at this point before.')
+                    "ignore", "The objective has been evaluated at this point before."
+                )
 
                 res = forest_minimize(
                     func=objective_function,
                     dimensions=dimensions,
                     n_calls=max_tries,
-                    base_estimator=ExtraTreesRegressor(n_estimators=20, min_samples_leaf=2),
-                    acq_func='LCB',
+                    base_estimator=ExtraTreesRegressor(
+                        n_estimators=20, min_samples_leaf=2
+                    ),
+                    acq_func="LCB",
                     kappa=3,
                     n_initial_points=min(max_tries, 20 + 3 * len(kwargs)),
-                    initial_point_generator='lhs',  # 'sobel' requires n_initial_points ~ 2**N
+                    initial_point_generator="lhs",  # 'sobel' requires n_initial_points ~ 2**N
                     callback=DeltaXStopper(9e-7),
-                    random_state=random_state)
+                    random_state=random_state,
+                )
 
             stats = self.run(**dict(zip(kwargs.keys(), res.x)))
             output = [stats]
 
             if return_heatmap:
-                heatmap = pd.Series(dict(zip(map(tuple, res.x_iters), -res.func_vals)),
-                                    name=maximize_key)
+                heatmap = pd.Series(
+                    dict(zip(map(tuple, res.x_iters), -res.func_vals)),
+                    name=maximize_key,
+                )
                 heatmap.index.names = kwargs.keys()
                 heatmap = heatmap[heatmap != -INVALID]
                 heatmap.sort_index(inplace=True)
@@ -2396,32 +2795,47 @@ class Backtest:
 
             return stats if len(output) == 1 else tuple(output)
 
-        if method == 'grid':
+        if method == "grid":
             output = _optimize_grid()
-        elif method == 'skopt':
+        elif method == "skopt":
             output = _optimize_skopt()
         else:
             raise ValueError(f"Method should be 'grid' or 'skopt', not {method!r}")
         return output
 
-    @ staticmethod
+    @staticmethod
     def _mp_task(backtest_uuid, batch_index):
         bt, param_batches, maximize_func = Backtest._mp_backtests[backtest_uuid]
-        return batch_index, [maximize_func(stats) if stats['# Trades'] else np.nan
-                             for stats in (bt.run(**params)
-                                           for params in param_batches[batch_index])]
+        return batch_index, [
+            maximize_func(stats) if stats["# Trades"] else np.nan
+            for stats in (bt.run(**params) for params in param_batches[batch_index])
+        ]
 
-    _mp_backtests: Dict[float, Tuple['Backtest', List, Callable]] = {}
+    _mp_backtests: Dict[float, Tuple["Backtest", List, Callable]] = {}
 
-    def plot(self, *, results: pd.Series = None, filename=None, plot_width=None,
-             plot_equity=True, plot_return=False, plot_pl=True,
-             plot_volume=False, plot_drawdown=False, plot_trades=True,
-             smooth_equity=False, relative_equity=True,
-             superimpose: Union[bool, str] = False,
-             resample=True, reverse_indicators=False,
-             show_legend=True, open_browser=True,
-             plot_allocation=False, relative_allocation=True,
-             plot_indicator=True):
+    def plot(
+        self,
+        *,
+        results: pd.Series = None,
+        filename=None,
+        plot_width=None,
+        plot_equity=True,
+        plot_return=False,
+        plot_pl=True,
+        plot_volume=False,
+        plot_drawdown=False,
+        plot_trades=True,
+        smooth_equity=False,
+        relative_equity=True,
+        superimpose: Union[bool, str] = False,
+        resample=True,
+        reverse_indicators=False,
+        show_legend=True,
+        open_browser=True,
+        plot_allocation=False,
+        relative_allocation=True,
+        plot_indicator=True,
+    ):
         """
         Plot the progression of the last backtest run.
 
@@ -2509,10 +2923,12 @@ class Backtest:
         """
         if results is None:
             if self._results is None:
-                raise RuntimeError('First issue `backtest.run()` to obtain results.')
+                raise RuntimeError("First issue `backtest.run()` to obtain results.")
             results = self._results
 
-        indicators = results._strategy._indicators + list(results._strategy._records.values())
+        indicators = results._strategy._indicators + list(
+            results._strategy._records.values()
+        )
 
         return plot(
             results=results,
@@ -2535,4 +2951,5 @@ class Backtest:
             open_browser=open_browser,
             plot_allocation=plot_allocation,
             relative_allocation=relative_allocation,
-            plot_indicator=plot_indicator)
+            plot_indicator=plot_indicator,
+        )

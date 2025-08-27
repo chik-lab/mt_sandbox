@@ -1,0 +1,17 @@
+[flake8]
+exclude =
+    migrations
+    __pycache__
+    manage.py
+    settings.py
+    env
+    .env
+    .venv_wsl
+    .git
+    .github
+    .vscode
+    .pytest_cache
+    .ruff_cache
+    .ruff_cache
+extend-ignore = E203,E501,E402
+max-complexity = 10

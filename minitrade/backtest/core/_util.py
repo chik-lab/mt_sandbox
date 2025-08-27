@@ -20,14 +20,16 @@ def _as_str(value) -> str:
     if isinstance(value, (Number, str)):
         return str(value)
     if isinstance(value, pd.DataFrame):
-        return value.attrs.get('name', None) or 'df'
-    name = str(getattr(value, 'name', '') or '')
-    if name in ('Open', 'High', 'Low', 'Close', 'Volume'):
+        return value.attrs.get("name", None) or "df"
+    name = str(getattr(value, "name", "") or "")
+    if name in ("Open", "High", "Low", "Close", "Volume"):
         return name[:1]
     if callable(value):
-        name = getattr(value, '__name__', value.__class__.__name__).replace('<lambda>', 'λ')
+        name = getattr(value, "__name__", value.__class__.__name__).replace(
+            "<lambda>", "λ"
+        )
     if len(name) > 10:
-        name = name[:9] + '…'
+        name = name[:9] + "…"
     return name
 
 
@@ -48,7 +50,9 @@ class _Array(np.ndarray):
 
     def __new__(cls, array, df: Union[Callable, pd.DataFrame, pd.Series]):
         if not callable(df) and not isinstance(df, (pd.DataFrame, pd.Series)):
-            raise ValueError(f'df must be callable or pd.DataFrame/pd.Series. Got {type(df)}')
+            raise ValueError(
+                f"df must be callable or pd.DataFrame/pd.Series. Got {type(df)}"
+            )
         obj = np.asarray(array).view(cls)
         obj.__df = df
         return obj
@@ -56,7 +60,7 @@ class _Array(np.ndarray):
     def __array_finalize__(self, obj):
         if obj is None:
             return
-        self.__df = getattr(obj, '__df', None)
+        self.__df = getattr(obj, "__df", None)
 
     # Make sure __df are carried over when (un-)pickling.
     def __reduce__(self):
@@ -68,7 +72,7 @@ class _Array(np.ndarray):
         super().__setstate__(state[:-1])
 
     def __repr__(self) -> str:
-        return super().__repr__() + f'\nwith df:\n{self.__df}'
+        return super().__repr__() + f"\nwith df:\n{self.__df}"
 
     @property
     def df(self) -> Union[pd.DataFrame, pd.Series]:
@@ -81,7 +85,7 @@ class _Array(np.ndarray):
         if isinstance(self.df, pd.Series):
             return self.df
         else:
-            raise ValueError(f'Value is not a pd.Series. Shape {self.df.shape}')
+            raise ValueError(f"Value is not a pd.Series. Shape {self.df.shape}")
 
     @staticmethod
     def lazy_indexing(df, idx):
@@ -129,21 +133,36 @@ class _Data:
         # cache slices of the data as DataFrame/Series for faster access
         arrays = (
             {ticker_col: arr for ticker_col, arr in self.__df.items()}
-            | {col: self.__df.xs(col, axis=1, level=1) for col in self.__df.columns.levels[1]}
+            | {
+                col: self.__df.xs(col, axis=1, level=1)
+                for col in self.__df.columns.levels[1]
+            }
             | {ticker: self.__df[ticker] for ticker in self.__df.columns.levels[0]}
-            | {None: self.__df[self.the_ticker] if len(self.__tickers) == 1 else self.__df}
-            | {'__index': self.__df.index.copy()}
+            | {
+                None: (
+                    self.__df[self.the_ticker]
+                    if len(self.__tickers) == 1
+                    else self.__df
+                )
+            }
+            | {"__index": self.__df.index.copy()}
         )
-        arrays = {key: df.iloc[:, 0] if isinstance(df, pd.DataFrame) and len(
-            df.columns) == 1 else df for key, df in arrays.items()}
+        arrays = {
+            key: (
+                df.iloc[:, 0]
+                if isinstance(df, pd.DataFrame) and len(df.columns) == 1
+                else df
+            )
+            for key, df in arrays.items()
+        }
         # keep another copy as Numpy array
         self.__arrays = {key: (df.to_numpy(), df) for key, df in arrays.items()}
 
     def __repr__(self):
         i = min(self.__i, len(self.__df)) - 1
-        index = self.__arrays['__index'][0][i]
-        items = ', '.join(f'{k}={v}' for k, v in self.__df.iloc[i].items())
-        return f'<Data i={i} ({index}) {items}>'
+        index = self.__arrays["__index"][0][i]
+        items = ", ".join(f"{k}={v}" for k, v in self.__df.iloc[i].items())
+        return f"<Data i={i} ({index}) {items}>"
 
     def __len__(self):
         return self.__i
@@ -151,48 +170,59 @@ class _Data:
     @property
     def df(self) -> pd.DataFrame:
         df_ = self.__df[self.the_ticker] if len(self.tickers) == 1 else self.__df
-        return df_.iloc[:self.__i] if self.__i < len(df_) else df_
+        return df_.iloc[: self.__i] if self.__i < len(df_) else df_
 
     @property
     def pip(self) -> float:
         if self.__pip is None:
-            self.__pip = float(10**-np.median([len(s.partition('.')[-1])
-                                               for s in self.__arrays['Close'][0].ravel().astype(str)]))
+            self.__pip = float(
+                10
+                ** -np.median(
+                    [
+                        len(s.partition(".")[-1])
+                        for s in self.__arrays["Close"][0].ravel().astype(str)
+                    ]
+                )
+            )
         return self.__pip
 
     def __get_array(self, key) -> _Array:
         arr = self.__cache.get(key)
         if arr is None:
             array, df = self.__arrays[key]
-            if key == '__index':
-                arr = self.__cache[key] = _Indicator(array=array[:self.__i], df=lambda: df[:self.__i])
+            if key == "__index":
+                arr = self.__cache[key] = _Indicator(
+                    array=array[: self.__i], df=lambda: df[: self.__i]
+                )
             else:
-                arr = self.__cache[key] = _Indicator(array=array[:self.__i], df=lambda: df.iloc[:self.__i])
+                arr = self.__cache[key] = _Indicator(
+                    array=array[: self.__i], df=lambda: df.iloc[: self.__i]
+                )
         return arr
 
     @property
     def Open(self) -> _Array:
-        return self.__get_array('Open')
+        return self.__get_array("Open")
 
     @property
     def High(self) -> _Array:
-        return self.__get_array('High')
+        return self.__get_array("High")
 
     @property
     def Low(self) -> _Array:
-        return self.__get_array('Low')
+        return self.__get_array("Low")
 
     @property
     def Close(self) -> _Array:
-        return self.__get_array('Close')
+        return self.__get_array("Close")
 
     @property
     def Volume(self) -> _Array:
-        return self.__get_array('Volume')
+        return self.__get_array("Volume")
 
     @property
     def index(self) -> pd.DatetimeIndex:
-        return self.__get_array('__index').df   # return pd.DatetimeIndex
+        return self.__get_array("__index").df  # return pd.DatetimeIndex
 
     # Make pickling in Backtest.optimize() work with our catch-all __getattr__
     def __getstate__(self):
@@ -214,10 +244,12 @@ class _Data:
         if len(self.__tickers) == 1:
             return self.__tickers[0]
         else:
-            raise ValueError('Ticker must explicitly specified for multi-asset backtesting')
+            raise ValueError(
+                "Ticker must explicitly specified for multi-asset backtesting"
+            )
 
     @property
-    def ta(self) -> '_TA':
+    def ta(self) -> "_TA":
         return self.__ta
 
 
@@ -250,18 +282,24 @@ class _TA:
         self.__df = df
         if self.__df.columns.nlevels == 2:
             self.__tickers = list(self.__df.columns.levels[0])
-            self.__indicators = {ticker: PicklableAnalysisIndicators(df[ticker]) for ticker in self.__tickers}
+            self.__indicators = {
+                ticker: PicklableAnalysisIndicators(df[ticker])
+                for ticker in self.__tickers
+            }
         elif self.__df.columns.nlevels == 1:
             self.__tickers = []
             self.__indicator = PicklableAnalysisIndicators(df)
         else:
             raise AttributeError(
-                f'df.columns can have at most 2 levels, got {self.__df.columns.nlevels}')
+                f"df.columns can have at most 2 levels, got {self.__df.columns.nlevels}"
+            )
 
     def __ta(self, method, *args, columns=None, **kwargs):
         if self.__tickers:
-            dir_ = {ticker: getattr(indicator, method)(*args, **kwargs)
-                    for ticker, indicator in self.__indicators.items()}
+            dir_ = {
+                ticker: getattr(indicator, method)(*args, **kwargs)
+                for ticker, indicator in self.__indicators.items()
+            }
             if columns:
                 for _, df in dir_.items():
                     df.columns = columns
@@ -274,15 +312,22 @@ class _TA:
 
     def apply(self, func, *args, **kwargs):
         if self.__tickers:
-            dir_ = {ticker: func(self.__df[ticker], *args, **kwargs) for ticker in self.__tickers}
+            dir_ = {
+                ticker: func(self.__df[ticker], *args, **kwargs)
+                for ticker in self.__tickers
+            }
             return pd.concat(dir_, axis=1)
         else:
             return func(self.__df, *args, **kwargs)
 
-    def join(self, df, lsuffix='', rsuffix=''):
+    def join(self, df, lsuffix="", rsuffix=""):
         if self.__tickers:
-            dir_ = {ticker: self.__df[ticker].join(df[ticker], lsuffix=lsuffix, rsuffix=rsuffix)
-                    for ticker in self.__tickers}
+            dir_ = {
+                ticker: self.__df[ticker].join(
+                    df[ticker], lsuffix=lsuffix, rsuffix=rsuffix
+                )
+                for ticker in self.__tickers
+            }
             return pd.concat(dir_, axis=1)
         else:
             return self.__df.join(df, lsuffix=lsuffix, rsuffix=rsuffix)

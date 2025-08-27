@@ -1,6 +1,6 @@
 """Read and write minitrade config file
 
-Note all config items should have default values so that an initial configuration file can 
+Note all config items should have default values so that an initial configuration file can
 be generated on installation.
 """
 
@@ -10,7 +10,7 @@ import sys
 import yaml
 from pydantic import BaseModel
 
-minitrade_root = os.path.expanduser('~/.minitrade')
+minitrade_root = os.path.expanduser("~/.minitrade")
 
 
 class SourceConfigYahoo(BaseModel):
@@ -53,9 +53,9 @@ class SourceConfig(BaseModel):
 
 
 class BrokerConfigIB(BaseModel):
-    gateway_host: str = '127.0.0.1'
+    gateway_host: str = "127.0.0.1"
     gateway_port: int = 5000
-    gateway_log_level: str = 'info'
+    gateway_log_level: str = "info"
 
 
 class BrokerConfig(BaseModel):
@@ -63,9 +63,9 @@ class BrokerConfig(BaseModel):
 
 
 class SchedulerConfig(BaseModel):
-    host: str = '127.0.0.1'
+    host: str = "127.0.0.1"
     port: int = 6666
-    log_level: str = 'info'
+    log_level: str = "info"
 
 
 class ProviderConfigMailjet(BaseModel):
@@ -93,25 +93,25 @@ class GlobalConfig(BaseModel):
     providers: ProviderConfig = ProviderConfig()
 
     @staticmethod
-    def load(config_yaml: str = '~/.minitrade/config.yaml'):
-        ''' Load minitrade configuration '''
+    def load(config_yaml: str = "~/.minitrade/config.yaml"):
+        """Load minitrade configuration"""
         try:
-            with open(os.path.expanduser(config_yaml), 'r') as f:
+            with open(os.path.expanduser(config_yaml), "r") as f:
                 yml = f.read()
             obj = yaml.safe_load(yml)
             config = GlobalConfig.model_validate(obj)
             return config
         except Exception as e:
-            raise RuntimeError('Loading configuration error') from e
+            raise RuntimeError("Loading configuration error") from e
 
-    def save(self, config_yaml: str = '~/.minitrade/config.yaml'):
-        ''' Save minitrade configuration '''
-        with open(os.path.expanduser(config_yaml), 'w') as f:
+    def save(self, config_yaml: str = "~/.minitrade/config.yaml"):
+        """Save minitrade configuration"""
+        with open(os.path.expanduser(config_yaml), "w") as f:
             f.write(yaml.safe_dump(self.model_dump()))
 
     @staticmethod
     def upgrade():
-        ''' Upgrade configuration file '''
+        """Upgrade configuration file"""
         try:
             config = GlobalConfig.load()
         except Exception:
@@ -119,12 +119,12 @@ class GlobalConfig(BaseModel):
         config.save()
 
 
-if 'pytest' not in sys.modules:
+if "pytest" not in sys.modules:
     try:
         config = GlobalConfig.load()
     except Exception:
         # Fall back to default config so imports won't fail
         config = GlobalConfig()
 else:
-    assert os.path.exists(os.path.expanduser('~/.minitrade/config.pytest.yaml'))
-    config = GlobalConfig.load('~/.minitrade/config.pytest.yaml')
+    assert os.path.exists(os.path.expanduser("~/.minitrade/config.pytest.yaml"))
+    config = GlobalConfig.load("~/.minitrade/config.pytest.yaml")

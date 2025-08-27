@@ -50,7 +50,9 @@ def convert_dataframe(csv: bytes) -> pd.DataFrame | pd.Series:
 
 
 def convert_dataframe2l(csv: bytes) -> pd.DataFrame:
-    return pd.read_csv(StringIO(csv.decode()), index_col=0, header=[0, 1], parse_dates=True)
+    return pd.read_csv(
+        StringIO(csv.decode()), index_col=0, header=[0, 1], parse_dates=True
+    )
 
 
 def convert_json(val):
@@ -85,28 +87,30 @@ class MTDB:
 
     @staticmethod
     def conn():
-        ''' Return a thread local db connection. 
-            Reference: https://ricardoanderegg.com/posts/python-sqlite-thread-safety/ 
-        '''
+        """Return a thread local db connection.
+        Reference: https://ricardoanderegg.com/posts/python-sqlite-thread-safety/
+        """
         try:
             return MTDB.thread_local.db
         except Exception:
-            if 'pytest' not in sys.modules:
+            if "pytest" not in sys.modules:
                 MTDB.thread_local.db = sqlite3.connect(
-                    os.path.expanduser('~/.minitrade/database/minitrade.db'),
-                    detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
+                    os.path.expanduser("~/.minitrade/database/minitrade.db"),
+                    detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES,
+                )
             else:
                 MTDB.thread_local.db = sqlite3.connect(
-                    os.path.expanduser('~/.minitrade/database/minitrade.pytest.db'),
-                    detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
+                    os.path.expanduser("~/.minitrade/database/minitrade.pytest.db"),
+                    detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES,
+                )
             MTDB.thread_local.db.row_factory = sqlite3.Row
             return MTDB.thread_local.db
 
     @staticmethod
     def get_one(tablename: str, where_key: str, where_value: Any, *, cls=None):
-        '''Return single row matching the query or None if no rows are available.'''
+        """Return single row matching the query or None if no rows are available."""
         table = Table(tablename)
-        stmt = Query.from_(table).select('*')
+        stmt = Query.from_(table).select("*")
         if where_key is not None:
             if where_value is None:
                 stmt = stmt.where(table[where_key].isnull())
@@ -117,11 +121,19 @@ class MTDB:
         return row if cls is None or row is None else cls(**row)
 
     @staticmethod
-    def get_all(tablename: str, where_key: str = None, where_value: Any = None, *, where: dict = None, orderby: str |
-                tuple[str, bool] = None, limit: int = None, cls=None):
-        '''Return all rows matching the query as a list, or empty list if no rows are available.'''
+    def get_all(
+        tablename: str,
+        where_key: str = None,
+        where_value: Any = None,
+        *,
+        where: dict = None,
+        orderby: str | tuple[str, bool] = None,
+        limit: int = None,
+        cls=None,
+    ):
+        """Return all rows matching the query as a list, or empty list if no rows are available."""
         table = Table(tablename)
-        stmt = Query.from_(table).select('*')
+        stmt = Query.from_(table).select("*")
         if where_key is not None:
             if where_value is None:
                 stmt = stmt.where(table[where_key].isnull())
@@ -148,7 +160,7 @@ class MTDB:
 
     @staticmethod
     def update(tablename: str, where_key: str, where_value: Any, *, values: dict):
-        '''Update rows matching the query'''
+        """Update rows matching the query"""
         table = Table(tablename)
         stmt = Query.update(table)
         if where_key is not None:
@@ -162,8 +174,10 @@ class MTDB:
             conn.execute(str(stmt))
 
     @staticmethod
-    def save(tablename: str, objects, *, on_conflict='error', whitelist=None, blacklist=None):
-        '''Save objects to ddb'''
+    def save(
+        tablename: str, objects, *, on_conflict="error", whitelist=None, blacklist=None
+    ):
+        """Save objects to ddb"""
         if not isinstance(objects, list):
             objects = [objects]
         for obj in objects:
@@ -172,27 +186,36 @@ class MTDB:
                 whitelisted = {k: data.get(k, None) for k in whitelist}
                 diff = set(data.keys()) - set(whitelisted.keys())
                 if diff:
-                    logger.warning(f'Unknonw attributes {diff} detected in {data}, not saved to {tablename}')
+                    logger.warning(
+                        f"Unknonw attributes {diff} detected in {data}, not saved to {tablename}"
+                    )
                 data = whitelisted
             if blacklist:
                 data = {k: v for k, v in data.items() if k not in blacklist}
             data = {k: serialize_to_db(v) for k, v in data.items()}
             table = Table(tablename)
-            if on_conflict == 'error':
+            if on_conflict == "error":
                 stmt = Query.into(table).columns(*data.keys()).insert(*data.values())
-            elif on_conflict == 'update':
+            elif on_conflict == "update":
                 stmt = Query.into(table).columns(*data.keys()).replace(*data.values())
-            elif on_conflict == 'ignore':
-                stmt = Query.into(table).columns(*data.keys()).insert(*data.values()).ignore()
-                stmt = str(stmt).replace('INSERT IGNORE', 'INSERT OR IGNORE')   # patch for sqlite syntax
+            elif on_conflict == "ignore":
+                stmt = (
+                    Query.into(table)
+                    .columns(*data.keys())
+                    .insert(*data.values())
+                    .ignore()
+                )
+                stmt = str(stmt).replace(
+                    "INSERT IGNORE", "INSERT OR IGNORE"
+                )  # patch for sqlite syntax
             else:
-                raise ValueError(f'Unknown conflict handling: {on_conflict}')
+                raise ValueError(f"Unknown conflict handling: {on_conflict}")
             with MTDB.conn() as conn:
                 conn.execute(str(stmt))
 
     @staticmethod
     def delete(tablename: str, where_key: str, where_value: Any):
-        '''Delete rows matching the query'''
+        """Delete rows matching the query"""
         table = Table(tablename)
         stmt = Query.from_(table).delete()
         if where_key is not None:
@@ -205,5 +228,5 @@ class MTDB:
 
     @staticmethod
     def uniqueid():
-        ''' Generate a short unique ID '''
-        return generate('1234567890abcdef', 20)
+        """Generate a short unique ID"""
+        return generate("1234567890abcdef", 20)
