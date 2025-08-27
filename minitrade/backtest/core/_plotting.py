@@ -27,6 +27,26 @@ from bokeh.plotting import figure as _figure
 
 # OHLCV_AGG import moved inside functions to avoid circular import
 
+
+def _windos_safe_filename(filename):
+    """
+    Create a safe filename for all platforms by removing/replacing problematic characters.
+    """
+    # Remove or replace problematic characters
+    safe_filename = re.sub(r"[<>:\"/\\|?*]", "_", filename)
+    safe_filename = re.sub(r"[^a-zA-Z0-9,_\-\.]", "_", safe_filename)
+
+    # Ensure it's not empty
+    if not safe_filename.strip():
+        safe_filename = "strategy_backtest"
+
+    # Limit length to avoid filesystem issues
+    if len(safe_filename) > 100:
+        safe_filename = safe_filename[:100]
+
+    return safe_filename
+
+
 try:
     from bokeh.models import CustomJSTickFormatter
 except ImportError:  # Bokeh < 3.0
@@ -61,14 +81,63 @@ def set_bokeh_output(notebook=False):
     global IS_JUPYTER_NOTEBOOK
     IS_JUPYTER_NOTEBOOK = notebook
 
+
+def get_output_directory():
+    """
+    Get the current working directory where HTML files will be saved.
+    """
+    import os
+
+    return os.getcwd()
+
+
+def set_output_directory(directory):
+    """
+    Set the output directory for HTML files.
+
+    Args:
+        directory (str): Path to the directory where HTML files should be saved
+    """
+    import os
+
+    if os.path.exists(directory) and os.path.isdir(directory):
+        os.chdir(directory)
+        print(f"Output directory set to: {os.getcwd()}")
+    else:
+        print(f"Warning: Directory {directory} does not exist or is not a directory")
+        print(f"Current working directory remains: {os.getcwd()}")
+
+
 def _bokeh_reset(filename=None):
     curstate().reset()
-    if filename:
+    print(f"_bokeh_reset called with filename: '{filename}' (type: {type(filename)})")
+    if filename and filename != "":  # Allow empty string to disable file output
         if not filename.endswith(".html"):
             filename += ".html"
-        output_file(filename, title=filename)
+        # Use the filename (strategy name) as the title, but clean it up
+        title = filename.replace(".html", "").replace("_", " ")
+        # Get absolute path for better debugging
+        import os
+
+        abs_filename = os.path.abspath(filename)
+        output_file(filename, title=title)
+        print(f"HTML file will be saved as: {filename}")
+        print(f"Absolute path: {abs_filename}")
+        print(f"Current working directory: {os.getcwd()}")
+
+        # Check if the directory exists and is writable
+        dir_path = os.path.dirname(abs_filename)
+        if dir_path and not os.path.exists(dir_path):
+            print(f"Warning: Directory {dir_path} does not exist")
+        elif dir_path and not os.access(dir_path, os.W_OK):
+            print(f"Warning: Directory {dir_path} is not writable")
     elif IS_JUPYTER_NOTEBOOK:
         curstate().output_notebook()
+        print("Output will be displayed in Jupyter notebook")
+    else:
+        print("No output file specified - use filename parameter to save HTML file")
+
+    return filename
 
 
 def colorgen():
@@ -214,6 +283,7 @@ def _determine_tickers_to_plot(data, traded_tickers):
 def _process_baseline_data(baseline):
     """Process baseline data to handle multi-symbol cases."""
     from .lib import OHLCV_AGG
+
     if isinstance(baseline.columns, pd.MultiIndex):
         # Store the full multi-symbol data for later use
         baseline_multi = baseline
@@ -289,6 +359,7 @@ def plot(
     data: pd.DataFrame,
     baseline: pd.DataFrame,
     indicators: List[Union[pd.DataFrame, pd.Series]],
+    filename="",
     plot_width=None,
     plot_equity=True,
     plot_return=False,
@@ -312,6 +383,85 @@ def plot(
     # We need to reset global Bokeh state, otherwise subsequent runs of
     # plot() contain some previous run's cruft data (was noticed when
     # TestPlot.test_file_size() test was failing).
+    # Use provided filename if available, otherwise auto-generate only in Jupyter notebook
+    if filename is None or filename == "":
+        if IS_JUPYTER_NOTEBOOK:
+            filename = ""  # Empty string to disable file output in notebook
+            print("Running in Jupyter notebook - no file output")
+        else:
+            # Try to construct the expected filename based on the simulation pattern
+            # The expected pattern is: /mnt/e/code/algo/output/simulations/YYYYMMDD_HHMMSS_plot.html
+            import os
+            import datetime
+            import glob
+
+            # Try to find the simulations directory
+            current_dir = os.getcwd()
+            print(f"Current working directory: {current_dir}")
+
+            # Look for simulations directory in common locations
+            possible_paths = [
+                os.path.join(current_dir, "output", "simulations"),
+                os.path.join(current_dir, "simulations"),
+                "/mnt/e/code/algo/output/simulations",  # Expected path from logs
+                os.path.join(os.path.dirname(current_dir), "output", "simulations"),
+            ]
+
+            simulations_dir = None
+            for path in possible_paths:
+                if os.path.exists(path):
+                    print(f"Found simulations directory: {path}")
+                    simulations_dir = path
+                    break
+
+            if simulations_dir:
+                # Look for existing result files to match their timestamp
+                result_files = glob.glob(os.path.join(simulations_dir, "*_result.log"))
+                if result_files:
+                    # Sort by modification time to get the most recent
+                    result_files.sort(key=os.path.getmtime, reverse=True)
+                    most_recent = result_files[0]
+                    print(f"Most recent result file: {most_recent}")
+
+                    # Extract timestamp from result filename
+                    basename = os.path.basename(most_recent)
+                    if basename.endswith("_result.log"):
+                        timestamp = basename.replace("_result.log", "")
+                        print(f"Extracted timestamp from result file: {timestamp}")
+
+                        # Construct plot filename with same timestamp
+                        filename = os.path.join(
+                            simulations_dir, f"{timestamp}_plot.html"
+                        )
+                        print(f"Auto-constructed filename matching result: {filename}")
+                    else:
+                        print("Could not extract timestamp from result filename")
+                        filename = ""
+                else:
+                    print("No result files found - using current timestamp")
+                    # Fallback to current timestamp
+                    now = datetime.datetime.now()
+                    timestamp = now.strftime("%Y%m%d_%H%M%S")
+                    filename = os.path.join(simulations_dir, f"{timestamp}_plot.html")
+                    print(f"Fallback filename with current timestamp: {filename}")
+            else:
+                print("No simulations directory found - plot will not be saved to file")
+                filename = ""
+    else:
+        print(f"Using provided filename: {filename}")
+
+    print(f"Final filename before _bokeh_reset: '{filename}'")
+
+    # Store the original filename for later use
+    original_filename = filename
+
+    # Only call _bokeh_reset if we have a valid filename
+    if filename and filename != "":
+        # Get the processed filename (with .html extension if needed)
+        processed_filename = _bokeh_reset(filename)
+    else:
+        processed_filename = ""
+        print("No filename specified - skipping file output")
 
     COLORS = [BEAR_COLOR, BULL_COLOR]
     BAR_WIDTH = 0.8
@@ -386,20 +536,7 @@ return this.labels[index] || "";
 
     NBSP = "\N{NBSP}" * 4  # noqa: E999
     ohlc_extreme_values = baseline[["High", "Low"]].copy(deep=False)
-    ohlc_tooltips = [
-        (
-            "OHLC",
-            NBSP.join(
-                (
-                    "@Open{0,0.0[0000]}",
-                    "@High{0,0.0[0000]}",
-                    "@Low{0,0.0[0000]}",
-                    "@Close{0,0.0[0000]}",
-                )
-            ),
-        ),
-        ("Volume", "@Volume{0,0}"),
-    ]
+    ohlc_tooltips = []
 
     def new_indicator_figure(**kwargs):
         kwargs.setdefault("height", 80)
@@ -705,6 +842,7 @@ return this.labels[index] || "";
     def _plot_superimposed_ohlc():
         """Superimposed, downsampled vbars"""
         from .lib import OHLCV_AGG
+
         time_resolution = pd.DatetimeIndex(baseline["datetime"]).resolution
         resample_rule = (
             superimpose
@@ -948,9 +1086,8 @@ return this.labels[index] || "";
             if is_overlay:
                 ohlc_tooltips.extend(label_tooltip_pairs)
             else:
-                # Skip adding tooltips for multi-symbol data since unified tooltip system will handle them
-                if baseline_multi is None:
-                    set_tooltips(fig, label_tooltip_pairs, vline=True, renderers=[r])
+                # Always set tooltips for non-overlay indicators in their own panels
+                set_tooltips(fig, label_tooltip_pairs, vline=True, renderers=[r])
                 # If the sole indicator line on this figure,
                 # have the legend only contain text without the glyph
                 if len(value) == 1:
@@ -1022,15 +1159,25 @@ return this.labels[index] || "";
     ):
         """Create a single unified dynamic tooltip showing both OHLCV and indicator values"""
 
-        # Build comprehensive tooltip list starting with OHLCV
-        unified_tooltips = [
-            ("Symbol", symbol),
-            ("Open", "@Open{0,0.0[0000]}"),
-            ("High", "@High{0,0.0[0000]}"),
-            ("Low", "@Low{0,0.0[0000]}"),
-            ("Close", "@Close{0,0.0[0000]}"),
-            ("Volume", "@Volume{0,0}"),
-        ]
+        # Build comprehensive tooltip list with date and OHLCV data
+        unified_tooltips = []
+
+        # Add date information (x-axis) to tooltips
+        if "datetime" in symbol_source.data:
+            unified_tooltips.append(("Date", "@datetime{%c}"))
+        else:
+            unified_tooltips.append(("#", "@index"))
+
+        # Add OHLCV data to tooltips
+        unified_tooltips.extend(
+            [
+                ("Open", "@Open{0,0.0[0000]}"),
+                ("High", "@High{0,0.0[0000]}"),
+                ("Low", "@Low{0,0.0[0000]}"),
+                ("Close", "@Close{0,0.0[0000]}"),
+                ("Volume", "@Volume{0,0}"),
+            ]
+        )
 
         # Add indicators to the symbol source and tooltip list
         for i, value in enumerate(indicators):
@@ -1407,6 +1554,38 @@ return this.labels[index] || "";
         merge_tools=True,
         **kwargs,  # type: ignore
     )
+    # Ensure file is saved even when browser is not opened
+    if processed_filename and processed_filename != "":
+        from bokeh.io import save
+        import os
+
+        try:
+            # Ensure the directory exists
+            dir_path = os.path.dirname(processed_filename)
+            if dir_path and not os.path.exists(dir_path):
+                os.makedirs(dir_path, exist_ok=True)
+                print(f"Created directory: {dir_path}")
+
+            # Save the file using the full path
+            save(fig, processed_filename)
+            print(f"Chart saved to: {processed_filename}")
+
+            # Verify file was created
+            if os.path.exists(processed_filename):
+                file_size = os.path.getsize(processed_filename)
+                print(
+                    f"File created successfully: {processed_filename} ({file_size} bytes)"
+                )
+                print(f"File location: {os.path.abspath(processed_filename)}")
+            else:
+                print(f"Warning: File {processed_filename} was not created")
+
+        except Exception as e:
+            print(f"Error saving file: {e}")
+            print(f"Attempted to save to: {processed_filename}")
+            print(f"Current working directory: {os.getcwd()}")
+            print(f"Absolute path attempted: {os.path.abspath(processed_filename)}")
+
     show(fig, browser=None if open_browser else "none")
     return fig
 
@@ -1427,7 +1606,13 @@ def plot_heatmaps(
             "`Backtest.optimize(..., return_heatmap=True)`"
         )
 
-    _bokeh_reset(filename)
+    # Only call _bokeh_reset if we have a valid filename
+    if filename and filename != "":
+        # Get the processed filename (with .html extension if needed)
+        processed_filename = _bokeh_reset(filename)
+    else:
+        processed_filename = ""
+        print("No filename specified for heatmap - skipping file output")
 
     param_combinations = combinations(heatmap.index.names, 2)
     dfs = [
@@ -1486,6 +1671,40 @@ def plot_heatmaps(
         toolbar_location="above",
         merge_tools=True,
     )
+
+    # Ensure file is saved even when browser is not opened
+    if processed_filename and processed_filename != "":
+        from bokeh.io import save
+        import os
+
+        try:
+            # Ensure the directory exists
+            dir_path = os.path.dirname(processed_filename)
+            if dir_path and not os.path.exists(dir_path):
+                os.makedirs(dir_path, exist_ok=True)
+                print(f"Created directory: {dir_path}")
+
+            # Save the file
+            save(fig, processed_filename)
+            print(f"Heatmap saved to: {processed_filename}")
+
+            # Verify file was created
+            if os.path.exists(processed_filename):
+                file_size = os.path.getsize(processed_filename)
+                print(
+                    f"File created successfully: {processed_filename} ({file_size} bytes)"
+                )
+                print(f"File location: {os.path.abspath(processed_filename)}")
+            else:
+                print(f"Warning: File {processed_filename} was not created")
+
+        except Exception as e:
+            print(f"Error saving file: {e}")
+            print(f"Attempted to save to: {processed_filename}")
+            print(f"Current working directory: {os.getcwd()}")
+            print(f"Absolute path attempted: {os.path.abspath(processed_filename)}")
+    else:
+        print("No filename specified for heatmap - chart will not be saved to file")
 
     show(fig, browser=None if open_browser else "none")
     return fig
