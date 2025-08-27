@@ -25,7 +25,7 @@ from bokeh.models import (
 )
 from bokeh.plotting import figure as _figure
 
-from .lib import OHLCV_AGG
+# OHLCV_AGG import moved inside functions to avoid circular import
 
 try:
     from bokeh.models import CustomJSTickFormatter
@@ -220,6 +220,7 @@ def _determine_tickers_to_plot(data, traded_tickers):
 
 def _process_baseline_data(baseline):
     """Process baseline data to handle multi-symbol cases."""
+    from .lib import OHLCV_AGG
     if isinstance(baseline.columns, pd.MultiIndex):
         # Store the full multi-symbol data for later use
         baseline_multi = baseline
@@ -715,6 +716,7 @@ return this.labels[index] || "";
 
     def _plot_superimposed_ohlc():
         """Superimposed, downsampled vbars"""
+        from .lib import OHLCV_AGG
         time_resolution = pd.DatetimeIndex(baseline["datetime"]).resolution
         resample_rule = (
             superimpose
