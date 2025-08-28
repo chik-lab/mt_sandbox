@@ -146,14 +146,9 @@ class _Data:
             }
             | {"__index": self.__df.index.copy()}
         )
-        arrays = {
-            key: (
-                df.iloc[:, 0]
-                if isinstance(df, pd.DataFrame) and len(df.columns) == 1
-                else df
-            )
-            for key, df in arrays.items()
-        }
+        # IMPORTANT: keep DataFrame shape even if there's only a single column
+        # (i.e., do not collapse to Series). This makes single-asset behave
+        # exactly like multi-asset when accessing .df and .iloc[-1].
         # keep another copy as Numpy array
         self.__arrays = {key: (df.to_numpy(), df) for key, df in arrays.items()}
 

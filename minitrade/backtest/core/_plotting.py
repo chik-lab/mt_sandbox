@@ -370,25 +370,26 @@ def _process_baseline_data(baseline):
     if isinstance(baseline.columns, pd.MultiIndex):
         # Store the full multi-symbol data for later use
         baseline_multi = baseline
-
-        # Create a simple baseline for the main chart (using first symbol but simplified)
+        # Create baseline for the main chart (use first symbol, simplified columns)
         first_symbol = baseline.columns.get_level_values(0)[0]
         baseline_main = baseline.loc[:, (first_symbol, slice(None))]
-        baseline_main.columns = baseline_main.columns.get_level_values(
-            1
-        )  # Remove symbol level
-
-        # Ensure we have the required OHLCV columns
+        baseline_main.columns = baseline_main.columns.get_level_values(1)
         if "Volume" not in baseline_main:
             baseline_main["Volume"] = 0
         baseline_main = baseline_main[list(OHLCV_AGG.keys())].copy(deep=False)
         return baseline_main, baseline_multi
     else:
-        # Original single-symbol logic
-        if "Volume" not in baseline:
-            baseline["Volume"] = 0
-        baseline = baseline[list(OHLCV_AGG.keys())].copy(deep=False)
-        return baseline, None
+        # Force single-symbol into multi-symbol shape so plotting always treats it as multi
+        single = baseline.copy(deep=False)
+        if "Volume" not in single:
+            single["Volume"] = 0
+        single = single[list(OHLCV_AGG.keys())].copy(deep=False)
+        # Wrap into a MultiIndex with a synthetic ticker name
+        ticker_name = getattr(single, "attrs", {}).get("symbol", None) or "Asset"
+        baseline_multi = pd.concat({ticker_name: single}, axis=1)
+        # For main chart, keep simplified single-symbol columns
+        baseline_main = single
+        return baseline_main, baseline_multi
 
 
 def _prepare_plot_data(results, data, baseline, indicators, resample):
@@ -1159,65 +1160,57 @@ return this.labels[index] || "";
                     fig.legend.glyph_width = 0
         return indicator_figs
 
-    def _plot_top_ohlc():
+    def _plot_top_summary_chart():
         """Plot multiple symbols as line on the same OHLC chart, plot OHLC bars if only one symbol"""
         if baseline_multi is None:
             return None
 
-        # Get unique symbols
-        symbols = baseline_multi.columns.get_level_values(0).unique()
-
         # Plot each symbol with different colors
-        colors = ["red", "blue", "green", "orange", "purple", "brown", "pink", "gray"]
-        color_idx = 0
         first_line = None
-        if len(symbols) == 1:
-            fig_ohlc.segment(
-                "index", "High", "index", "Low", source=source, color="black"
+        fig = fig_ohlc
+        ohlc_colors = colorgen()
+        label_tooltip_pairs = []
+        # Respect traded tickers only (if provided)
+        for ticker in tickers_to_plot:
+            color = next(ohlc_colors)
+            source_name = ticker
+            arr = data.loc[:, (ticker, "Close")]
+            source.add(arr, source_name)
+            label_tooltip_pairs.append(
+                (source_name, f"@{{{source_name}}}{{0,0.0[0000]}}")
             )
-            r = fig_ohlc.vbar(
-                "index",
-                BAR_WIDTH,
-                "Open",
-                "Close",
-                source=source,
-                line_color="black",
-                fill_color=inc_cmap,
-            )
-            return r
-        elif len(symbols) > 1:
-            for symbol in symbols[:8]:  # Limit to 8 symbols to avoid clutter
-                symbol_data = baseline_multi.loc[:, (symbol, "Close")]
-                symbol_data = symbol_data.reset_index(drop=True)
-
-                # Add to source
-                source.add(symbol_data, f"{symbol}_Close")
-
-                # Plot line
-                color = colors[color_idx % len(colors)]
-                line = fig_ohlc.line(
+            ohlc_extreme_values[source_name] = arr.reset_index(drop=True)
+            if first_line is None:
+                first_line = fig.line(
                     "index",
-                    f"{symbol}_Close",
+                    source_name,
                     source=source,
+                    legend_label=source_name,
                     line_color=color,
-                    line_width=1,
-                    legend_label=symbol,
-                    line_alpha=0.7,
+                    line_width=2,
                 )
+            else:
+                fig.line(
+                "index",
+                source_name,
+                source=source,
+                legend_label=source_name,
+                line_color=color,
+                line_width=2,
+            )
+        ohlc_tooltips.extend(label_tooltip_pairs)
+        if len(tickers_to_plot) > 10:
+            fig.line(
+                0,
+                0,
+                legend_label=f"{len(tickers_to_plot)-10} more tickers hidden",
+                line_color="black",
+            )
+        fig.legend.orientation = "horizontal"
+        fig.legend.background_fill_alpha = 0.8
+        fig.legend.border_line_alpha = 0
 
-                # Store the first line
-                if first_line is None:
-                    first_line = line
-
-                color_idx += 1
-
-            # Add legend
-            if len(symbols) > 1:
-                fig_ohlc.legend.orientation = "horizontal"
-                fig_ohlc.legend.background_fill_alpha = 0.8
-                fig_ohlc.legend.border_line_alpha = 0
-
-            return first_line
+        return first_line
 
     def _create_unified_legend(
         symbol_fig, symbol, symbol_source, indicators, ohlc_renderer=None
@@ -1599,13 +1592,11 @@ return this.labels[index] || "";
 
     if superimpose and is_datetime_index:
         _plot_superimposed_ohlc()
-
-    first_line = _plot_top_ohlc()
+    #Get the first line to set tooltips
+    first_line = _plot_top_summary_chart()
     if plot_trades and (not tickers_to_plot or len(tickers_to_plot) <= 10):
         _plot_ohlc_trades()
 
-    if tickers_to_plot and len(tickers_to_plot) > 1:
-        _plot_ohlc_universe()
     if plot_indicator:
         indicator_figs = _plot_indicators()
         if reverse_indicators:
