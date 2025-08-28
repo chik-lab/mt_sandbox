@@ -70,14 +70,6 @@ def _prepare_trades_dataframe(trades):
             "Gross%": [t.pl_pct for t in trades],
             "EntryTime": [t.entry_time for t in trades],
             "ExitTime": [t.exit_time for t in trades],
-            "Tag": [t.tag for t in trades],
-            # Commission fields (0 when not enabled)
-            "EntryCommission": [
-                getattr(t, "entry_commission", 0.0) or 0.0 for t in trades
-            ],
-            "ExitCommission": [
-                getattr(t, "exit_commission", 0.0) or 0.0 for t in trades
-            ],
             "CommissionTotal": [
                 getattr(t, "commission_total", 0.0) or 0.0 for t in trades
             ],
@@ -86,7 +78,7 @@ def _prepare_trades_dataframe(trades):
     trades_df["Duration"] = trades_df["ExitTime"] - trades_df["EntryTime"]
     # Net PnL after commissions when available
     if "CommissionTotal" in trades_df:
-        trades_df["PnLNet"] = trades_df["PnL"] - trades_df["CommissionTotal"]
+        trades_df["NetPnL"] = trades_df["PnL"] - trades_df["CommissionTotal"]
 
     return trades_df
 
@@ -237,7 +229,7 @@ def compute_stats(
 
     # Extract key metrics
     pl = trades_df["PnL"]
-    pl_net = trades_df["PnLNet"] if "PnLNet" in trades_df.columns else pl
+    pl_net = trades_df["NetPnL"] if "NetPnL" in trades_df.columns else pl
     returns = trades_df["Gross%"]
     durations = trades_df["Duration"]
 
