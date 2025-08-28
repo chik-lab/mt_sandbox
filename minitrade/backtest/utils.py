@@ -17,7 +17,7 @@ import pandas as pd
 import seaborn as sns
 from tqdm.auto import tqdm
 
-from minitrade.backtest.core import Backtest, Strategy
+from .core import Backtest, Strategy
 
 plt.rcParams["figure.figsize"] = (20, 3)
 plt.rcParams["axes.grid"] = True
