@@ -2330,11 +2330,13 @@ class Backtest:
             Obviously, this can affect results.
         """
         # Extract risk_free_rate from kwargs before passing to strategy
-        risk_free_rate = kwargs.pop('risk_free_rate', 0.03)
-        
+        risk_free_rate = kwargs.pop("risk_free_rate", 0.03)
+
         data = _Data(self._data.copy(deep=False))
         broker: _Broker = self._broker(data=data)
-        strategy: Strategy = self._strategy(broker, data, kwargs)  # kwargs no longer contains risk_free_rate
+        strategy: Strategy = self._strategy(
+            broker, data, kwargs
+        )  # kwargs no longer contains risk_free_rate
         processed_orders: List[Order] = []
         final_positions = None
 
@@ -2445,9 +2447,9 @@ class Backtest:
             )
 
         # After strategy execution, capture phase data
-        if hasattr(strategy, 'get_phase_plot_data'):
-            self._results['_phase_data'] = strategy.get_phase_plot_data()
-        
+        if hasattr(strategy, "get_phase_plot_data"):
+            self._results["_phase_data"] = strategy.get_phase_plot_data()
+
         return self._results.copy()
 
     def optimize(

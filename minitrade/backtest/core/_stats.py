@@ -151,7 +151,7 @@ def _calculate_risk_metrics(
     )
 
     # Sortino Ratio
-    
+
     with warnings.catch_warnings():
         warnings.filterwarnings("error")
         try:
