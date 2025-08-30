@@ -2444,6 +2444,10 @@ class Backtest:
                 trade_start_bar=start,
             )
 
+        # After strategy execution, capture phase data
+        if hasattr(strategy, 'get_phase_plot_data'):
+            self._results['_phase_data'] = strategy.get_phase_plot_data()
+        
         return self._results.copy()
 
     def optimize(

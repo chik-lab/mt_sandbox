@@ -10,9 +10,10 @@ from typing import Callable, List, Union
 import numpy as np
 import pandas as pd
 from bokeh.colors import RGB
-from bokeh.colors.named import lime as BULL_COLOR
-from bokeh.colors.named import tomato as BEAR_COLOR
+from bokeh.colors.named import forestgreen as BULL_COLOR
+from bokeh.colors.named import orangered as BEAR_COLOR
 from bokeh.models import (
+    BoxAnnotation,
     ColumnDataSource,
     CustomJS,
     DatetimeTickFormatter,
@@ -22,6 +23,8 @@ from bokeh.models import (
     NumeralTickFormatter,
     Range1d,
     Span,
+    Label,
+    LinearAxis,
 )
 from bokeh.plotting import figure as _figure
 
@@ -55,7 +58,7 @@ except ImportError:  # Bokeh < 3.0
 from bokeh.io import output_file, output_notebook, show
 from bokeh.io.state import curstate
 from bokeh.layouts import gridplot
-from bokeh.palettes import Category10
+from bokeh.palettes import Bokeh
 from bokeh.transform import factor_cmap
 
 from ._util import _as_list, _data_period
@@ -224,7 +227,7 @@ def _open_html_external(file_path: str) -> None:
 
 
 def colorgen():
-    yield from cycle(Category10[10])
+    yield from cycle(Bokeh[8])
 
 
 def lightness(color, lightness=0.94):
@@ -397,6 +400,9 @@ def _prepare_plot_data(results, data, baseline, indicators, resample):
     equity_data = results["_equity_curve"].copy()
     trades = results["_trades"]
 
+    # Extract phase data if available
+    phase_data = results.get("_phase_data", {})
+
     # Extract traded tickers
     traded_tickers = _extract_traded_tickers(trades)
 
@@ -430,6 +436,7 @@ def _prepare_plot_data(results, data, baseline, indicators, resample):
         "indicators": indicators,
         "equity_data": equity_data,
         "trades": trades,
+        "phase_data": phase_data,
         "traded_tickers": traded_tickers,
         "tickers_to_plot": tickers_to_plot,
         "index": index,
@@ -541,6 +548,7 @@ def plot(
     indicators = plot_data["indicators"]
     equity_data = plot_data["equity_data"]
     trades = plot_data["trades"]
+    phase_data = plot_data["phase_data"]
     traded_tickers = plot_data["traded_tickers"]
     tickers_to_plot = plot_data["tickers_to_plot"]
     index = plot_data["index"]
@@ -690,7 +698,7 @@ return this.labels[index] || "";
             source=source,
             line_width=2,
             line_alpha=1,
-            color="blue",
+            color="#3E54D3",
             legend_label="Total Value",
         )
         fig.line(
@@ -699,7 +707,7 @@ return this.labels[index] || "";
             source=source,
             line_width=1.5,
             line_alpha=0.8,
-            color="red",
+            color="#4FE086",
             legend_label="Cash",
         )
 
@@ -894,7 +902,7 @@ return this.labels[index] || "";
 
     def _plot_volume_section():
         """Volume section"""
-        fig = new_indicator_figure(y_axis_label="Volume")
+        fig = new_bokeh_figure(y_axis_label="Volume")
         fig.xaxis.formatter = fig_ohlc.xaxis[0].formatter
         fig.xaxis.visible = True
         fig_ohlc.xaxis.visible = False  # Show only Volume's xaxis
@@ -1351,7 +1359,7 @@ return this.labels[index] || "";
         symbol_figs = []
 
         for symbol in symbols:
-            #TODO - Independent x-range for each symbol now, share x-axis with main chart
+            #TODO - Volume will displa
             # Extract symbol data
             symbol_data = baseline_multi.loc[:, (symbol, slice(None))]
             symbol_data.columns = symbol_data.columns.get_level_values(1)
@@ -1377,9 +1385,9 @@ return this.labels[index] || "";
             combined_fig = new_bokeh_figure(
                 title=f"{symbol} OHLC + Volume",
                 height=500,  # Taller to accommodate both OHLC and volume
-                x_range=Range1d(0, max(1, len(symbol_data) - 1)),  # Independent x-range
+                x_range=fig_ohlc.x_range,  # Share x-axis with main chart
             )
-
+            
             # Apply datetime formatting to x-axis (same as main chart)
             if is_datetime_index:
                 combined_fig.xaxis.formatter = CustomJSTickFormatter(
@@ -1415,40 +1423,51 @@ return this.labels[index] || "";
             # No static legend needed - all OHLCV and indicator values are shown dynamically in tooltips
 
             # Calculate volume range for scaling
-            volume_max = symbol_data["Volume"].max()
+            # Use dollar volume (volume * close price) for better market representation
+            dollar_volume = symbol_data["Volume"] * symbol_data["Close"]
+            volume_max = dollar_volume.max()
 
-            # Scale volume to appear at bottom (e.g., 20% of price range)
+            # Scale volume to appear at bottom (e.g., 15% of price range) - reduced from 20% to prevent overlap
             price_max = symbol_data[["High", "Low", "Open", "Close"]].max().max()
             price_min = symbol_data[["High", "Low", "Open", "Close"]].min().min()
             price_range = price_max - price_min
 
-            # Scale volume to bottom 20% of the chart
+            # Scale volume to fit nicely in the bottom section without being too small
             volume_scale_factor = (
                 (price_range * 0.2) / volume_max if volume_max > 0 else 1
             )
+            
+            # Position volume below price with minimal gap
+            buffer_zone = price_range * 0.05  # Small 5% gap
+            volume_bottom = price_min - buffer_zone
+            
             symbol_data["Volume_scaled"] = (
-                symbol_data["Volume"] * volume_scale_factor + price_min
+                dollar_volume * volume_scale_factor + volume_bottom
             )
 
             # Update source with scaled volume
             symbol_source.add(symbol_data["Volume_scaled"], "Volume_scaled")
+            
+            # Add the columns that the autoscaling callback expects
+            symbol_source.add(symbol_data["High"], "ohlc_high")
+            symbol_source.add(symbol_data["Low"], "ohlc_low")
 
             # Plot volume bars at the bottom using scaled volume
             combined_fig.vbar(
                 "index",
                 BAR_WIDTH,
-                price_min,
                 "Volume_scaled",
+                volume_bottom,
                 source=symbol_source,
                 line_color="black",
                 fill_color=factor_cmap("inc", COLORS, ["0", "1"]),
-                alpha=0.6,
-            )  # Make volume bars slightly transparent
+                alpha=0.5,  # Make volume bars more transparent for better separation
+            )
 
             # Tooltips will be handled by the unified tooltip system in _create_unified_legend
 
             # Add a horizontal line to separate OHLC from volume
-            separator_y = price_min + (price_range * 0.2)
+            separator_y = price_min - buffer_zone  # Position separator at the buffer zone
             combined_fig.add_layout(
                 Span(
                     location=separator_y,
@@ -1534,7 +1553,148 @@ return this.labels[index] || "";
                         legend_label=f"{symbol} Exits",
                     )
 
-                    # Trade information can be accessed via the unified tooltip system
+            # Trade information can be accessed via the unified tooltip system
+
+            # ADD PHASE HIGHLIGHTING - same pattern as trades
+            if phase_data and 'completion_points' in phase_data:
+                # Get symbol-specific phase data - check if using 'ticker' or 'symbol' key
+                completion_points = phase_data['completion_points']
+                if completion_points and len(completion_points) > 0:
+                    # Check what keys are available in the first point
+                    sample_point = completion_points[0]
+                    if 'ticker' in sample_point:
+                        symbol_phase_points = [point for point in completion_points if point['ticker'] == symbol]
+                    elif 'symbol' in sample_point:
+                        symbol_phase_points = [point for point in completion_points if point['symbol'] == symbol]
+                    else:
+                        # If no matching key found, skip phase highlighting
+                        symbol_phase_points = []
+                else:
+                    symbol_phase_points = []
+                
+                # Calculate price range for label positioning
+                price_max = symbol_data[["High", "Low", "Open", "Close"]].max().max()
+                price_min = symbol_data[["High", "Low", "Open", "Close"]].min().min()
+                price_range = price_max - price_min
+                
+                # Define colors for different phases
+                colors = {
+                    1: '#F3533A',  # Vibrant red-orange
+                    2: '#FA9F42',  # Bright orange
+                    3: '#8AD879',  # Bright green
+                    4: '#5ACFC9',  # Teal
+                    'completion': '#5ACFC9',  # Teal
+                    'timeout': '#9B59B6'  # Purple
+                }
+                
+                # Create expanding phase highlights that extend until next phase, timeout, or completion
+                for i, point in enumerate(symbol_phase_points):
+                    if isinstance(point['phase'], int):  # Regular phases
+                        current_bar = point['bar_idx']
+                        
+                        # Find the next event (phase completion, timeout, or completion)
+                        next_bar = len(symbol_data.index) - 1  # Default to end of data
+                        for j in range(i + 1, len(symbol_phase_points)):
+                            next_point = symbol_phase_points[j]
+                            if (isinstance(next_point['phase'], int) or 
+                                next_point['phase'].startswith('timeout_') or 
+                                next_point['phase'].startswith('retreat_') or 
+                                next_point['phase'] == 'completion'):
+                                next_bar = next_point['bar_idx']  # Start of next event, not end
+                                break
+                        
+                        if current_bar < len(symbol_data.index):
+                            # Add expanding phase highlight
+                            combined_fig.add_layout(
+                                BoxAnnotation(
+                                    left=current_bar - 0.5,
+                                    right=next_bar + 0.5,
+                                    fill_color=colors[point['phase']],
+                                    fill_alpha=0.2,
+                                    line_color=colors[point['phase']],
+                                    line_alpha=0.5,
+                                    line_width=1,
+                                )
+                            )
+                            
+                            # Add phase label at the top
+                            label = Label(
+                                x=int((current_bar+ next_bar)/2) ,
+                                y=price_max,  # At top of graph
+                                text=f'P{point["phase"]}',
+                                text_color=colors[point['phase']],
+                                text_font_size='12pt',
+                                text_font_style='bold',
+                                x_offset=0,
+                                y_offset=0,
+                            )
+                            combined_fig.add_layout(label)
+                    
+                    elif point['phase'].startswith('timeout_') or point['phase'].startswith('retreat_'):  # Timeout events
+                        # Add timeout marker as a vertical line with different style
+                        phase_num = point['phase'].split('_')[1]
+                        # Position line between bars (at date boundary)
+                        line_position = point['bar_idx'] + 0.5
+                        combined_fig.add_layout(
+                            Span(
+                                location=line_position,
+                                dimension="height",
+                                line_color=colors[int(phase_num)],
+                                line_dash="dotted",
+                                line_width=3,
+                                line_alpha=0.8,
+                            )
+                        )
+                        
+                        # Add retreat/timeout label
+                        label = Label(
+                            x=line_position,
+                            y=price_max,  # At top of graph
+                            text=f'P{phase_num} {point['phase'].split('_')[0]}',
+                            text_color=colors[int(phase_num)],
+                            text_font_size='10pt',
+                            text_font_style='italic',
+                            x_offset=0,
+                            y_offset=0,
+                        )
+                        combined_fig.add_layout(label)
+                
+                # Handle completion points as vertical lines
+                completion_bars = [point['bar_idx'] for point in symbol_phase_points if point['phase'] == 'completion']
+                for bar_idx in completion_bars:
+                    if bar_idx < len(symbol_data.index):
+                        # Add vertical line for completion
+                        # Position line between bars (at date boundary)
+                        line_position = bar_idx + 0.5
+                        combined_fig.add_layout(
+                            Span(
+                                location=line_position,
+                                dimension="height",
+                                line_color=colors['completion'],
+                                line_dash="solid",
+                                line_width=3,
+                                line_alpha=0.9,
+                            )
+                        )
+                        
+                        # Add completion label
+                        label = Label(
+                            x=line_position,
+                            y=price_max,
+                            text='Complete',
+                            text_color=colors['completion'],
+                            text_font_size='12pt',
+                            text_font_style='bold',
+                            x_offset=0,
+                            y_offset=0,
+                        )
+                        combined_fig.add_layout(label)
+                
+                # Check if symbol is currently in an active phase and update title
+                latest_phase = max([point['phase'] for point in symbol_phase_points if isinstance(point['phase'], int)], default=0)
+                if latest_phase > 0:
+                    combined_fig.title.text = f"{symbol} OHLC + Volume"
+
 
             # Create unified legend with OHLCV + indicators - do this LAST to override any automatic tooltips
             _create_unified_legend(
@@ -1564,6 +1724,58 @@ return this.labels[index] || "";
                 pass
 
             # Legend visibility will be controlled by the main plotting loop
+
+            # Add individual y-axis autoscaling for this symbol chart
+            symbol_js_args = dict(
+                ohlc_range=combined_fig.y_range, 
+                source=symbol_source
+            )
+            
+            # Simplified autoscaling callback for individual symbol charts (no volume)
+            symbol_autoscale_code = """
+            // Enforce strict x-axis limits to prevent zooming out beyond data
+            let total_bars = source.data['ohlc_high'].length;
+            
+            // Clamp x-axis range to data boundaries
+            if (cb_obj.start < 0) {
+                cb_obj.start = 0;
+            }
+            if (cb_obj.end > total_bars) {
+                cb_obj.end = total_bars;
+            }
+            
+            // Prevent zooming out to show less than all data
+            let visible_bars = cb_obj.end - cb_obj.start;
+            if (visible_bars > total_bars) {
+                cb_obj.start = 0;
+                cb_obj.end = total_bars;
+            }
+            
+            // Force the x-axis to update with clamped values
+            cb_obj.trigger('change');
+            
+            // Do autoscaling for y-axis
+            let i = Math.max(Math.floor(cb_obj.start), 0);
+            let j = Math.min(Math.ceil(cb_obj.end), total_bars);
+            
+            if (i < j && source.data['ohlc_high'].length > 0) {
+                let visible_highs = source.data['ohlc_high'].slice(i, j);
+                let visible_lows = source.data['ohlc_low'].slice(i, j);
+                
+                let max = Math.max.apply(null, visible_highs);
+                let min = Math.min.apply(null, visible_lows);
+                
+                if (min !== Infinity && max !== -Infinity) {
+                    let pad = (max - min) * 0.03;
+                    ohlc_range.start = min - pad;
+                    ohlc_range.end = max + pad;
+                }
+            }
+            """
+            
+            symbol_autoscale_cb = CustomJS(args=symbol_js_args, code=symbol_autoscale_code)
+            combined_fig.x_range.js_on_change("start", symbol_autoscale_cb)
+            combined_fig.x_range.js_on_change("end", symbol_autoscale_cb)
 
             symbol_figs.append(combined_fig)
 
@@ -1618,7 +1830,41 @@ return this.labels[index] || "";
     if plot_volume:
         custom_js_args.update(volume_range=fig_volume.y_range)
 
-    const_cb = CustomJS(args=custom_js_args, code=_AUTOSCALE_JS_CALLBACK)  # type: ignore
+    # Create a safer autoscaling callback that handles missing volume_range
+    main_autoscale_code = """
+    // Clear any existing timeout
+    if (window._bt_autoscale_timeout) {
+        clearTimeout(window._bt_autoscale_timeout);
+    }
+    
+    // Set new timeout for autoscaling
+    window._bt_autoscale_timeout = setTimeout(function () {
+        let i = Math.max(Math.floor(cb_obj.start), 0);
+        let j = Math.min(Math.ceil(cb_obj.end), source.data['ohlc_high'].length);
+        
+        if (i < j && source.data['ohlc_high'].length > 0) {
+            let max = Math.max.apply(null, source.data['ohlc_high'].slice(i, j));
+            let min = Math.min.apply(null, source.data['ohlc_low'].slice(i, j));
+            
+            if (min !== Infinity && max !== -Infinity) {
+                let pad = (max - min) * 0.03;
+                ohlc_range.start = min - pad;
+                ohlc_range.end = max + pad;
+            }
+        }
+        
+        // Only update volume range if it exists
+        if (typeof volume_range !== 'undefined' && volume_range) {
+            if (i < j && source.data['Volume'].length > 0) {
+                let max = Math.max.apply(null, source.data['Volume'].slice(i, j));
+                volume_range.start = 0;
+                volume_range.end = max * 1.03;
+            }
+        }
+    }, 50);
+    """
+    
+    const_cb = CustomJS(args=custom_js_args, code=main_autoscale_code)
     fig_ohlc.x_range.js_on_change("start", const_cb)
     fig_ohlc.x_range.js_on_change("end", const_cb)
 
