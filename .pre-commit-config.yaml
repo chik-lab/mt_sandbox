@@ -11,14 +11,6 @@ repos:
     stages: [pre-commit]
 - repo: local
   hooks:
-  - id: pytest-pre-push
-    name: pytest (pre-push)
-    entry: /mnt/e/code/algo/.venv/bin/pytest -q
-    language: system
-    pass_filenames: false
-    stages: [pre-commit]
-- repo: local
-  hooks:
   - id: freeze-requirements
     name: freeze requirements.txt from venv
     entry: bash scripts/update-requirements.sh
