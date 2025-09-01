@@ -28,7 +28,7 @@ from bokeh.models import (
 )
 from bokeh.plotting import figure as _figure
 
-# OHLCV_AGG import moved inside functions to avoid circular import
+
 
 
 def _windos_safe_filename(filename):
@@ -52,7 +52,7 @@ def _windos_safe_filename(filename):
 
 try:
     from bokeh.models import CustomJSTickFormatter
-except ImportError:  # Bokeh < 3.0
+except ImportError:
     from bokeh.models import FuncTickFormatter as CustomJSTickFormatter
 
 from bokeh.io import output_file, output_notebook, show
@@ -1609,13 +1609,9 @@ return this.labels[index] || "";
                         start_bar = 0
                         
                         # Process each completion point to build phase ranges
-                        print(f"\n=== PHASE PLOTTING DEBUG for {symbol} ===")
-                        print(f"Total completion points: {len(symbol_completion_points)}")
-                        for i, point in enumerate(symbol_completion_points):
+                        for _, point in enumerate(symbol_completion_points):
                             point_bar = point.get("bar_idx", 0)
                             point_phase = point.get("phase", "unknown")
-                            from_phase = point.get("from_phase", 0)
-                            print(f"Point {i}: bar_idx={point_bar}, phase={point_phase}, from_phase={from_phase}, label='{point.get('label', 'N/A')}'")
                             
                             # Handle different types of phase transitions
                             if isinstance(point_phase, int) and 0 <= point_phase <= 3:
@@ -1630,11 +1626,8 @@ return this.labels[index] || "";
                                             'phase': current_phase,
                                             'label': phase_label
                                         }
-                                        phase_ranges.append(phase_range)
-                                        print(f"  Added phase range: {phase_range}")
-                                    
+                                        phase_ranges.append(phase_range)                                    
                                     # Update for next phase - start at the transition point
-                                    print(f"  Transition: Phase {current_phase} -> Phase {point_phase} at bar {point_bar}")
                                     start_bar = point_bar
                                     current_phase = point_phase
                             
@@ -1700,11 +1693,9 @@ return this.labels[index] || "";
                                 'label': phase_label
                             }
                             phase_ranges.append(final_phase_range)
-                            print(f"  Added final phase range: {final_phase_range}")
+
                         elif start_bar < len(symbol_data.index) - 1 and current_phase == 0:
-                            print(f"  Skipped final Phase 0 range: current_phase=0, no qualification event")
-                        
-                        print(f"Final phase ranges before Phase 0 addition: {phase_ranges}")
+                            pass
                         
                         # Add Screening (Phase 0) segments based on indicator start time to hit time
                         # Find all Phase 1 transitions and add Phase 0 before each
@@ -1712,7 +1703,6 @@ return this.labels[index] || "";
                             p for p in symbol_completion_points 
                             if isinstance(p.get("phase"), int) and p.get("phase") == 1
                         ]
-                        print(f"Found {len(phase1_transitions)} Phase 1 transitions")
                         
                         for phase1_point in phase1_transitions:
                             phase1_bar = phase1_point.get("bar_idx", 0)
@@ -1732,9 +1722,9 @@ return this.labels[index] || "";
                                     'label': f'Screening ({selected_tf}d gain)'
                                 }
                                 phase_ranges.append(phase0_range)
-                                print(f"  Added Phase 0 range (qualifying period): {phase0_range}")
+
                             else:
-                                print(f"  Skipped Phase 0 range: start0={start0}, end0={end0}")
+                                pass
                     else:
                         # No completion points for this symbol, show Phase 0 for entire range
                         phase_ranges = [{
@@ -1743,9 +1733,8 @@ return this.labels[index] || "";
                             'phase': 0,
                             'label': 'Screening'
                         }]
-                        print(f"No completion points found for {symbol}, showing Phase 0 for entire range")
                     
-                    print(f"Final phase ranges for {symbol}: {phase_ranges}")
+                    
                     
                     # Plot phase highlights
                     for phase_range in phase_ranges:
@@ -1983,14 +1972,10 @@ return this.labels[index] || "";
         # Save to file
         import os
         from bokeh.io import save
-
-        try:
-            dir_path = os.path.dirname(processed_filename)
-            if dir_path and not os.path.exists(dir_path):
-                os.makedirs(dir_path, exist_ok=True)
-            save(fig, processed_filename)
-        except Exception as e:
-            print(f"Error saving file: {e}")
+        dir_path = os.path.dirname(processed_filename)
+        if dir_path and not os.path.exists(dir_path):
+            os.makedirs(dir_path, exist_ok=True)
+        save(fig, processed_filename)
 
         # Open if requested (avoid Bokeh show double-write)
         if open_browser:
@@ -2094,14 +2079,12 @@ def plot_heatmaps(
         import os
         from bokeh.io import save
 
-        try:
-            dir_path = os.path.dirname(processed_filename)
-            if dir_path and not os.path.exists(dir_path):
-                os.makedirs(dir_path, exist_ok=True)
-            save(fig, processed_filename)
-        except Exception as e:
-            print(f"Error saving file: {e}")
-
+        
+        dir_path = os.path.dirname(processed_filename)
+        if dir_path and not os.path.exists(dir_path):
+            os.makedirs(dir_path, exist_ok=True)
+        save(fig, processed_filename)
+        
         # Open if requested (avoid Bokeh show double-write)
         if open_browser:
             _open_html_external(processed_filename)
