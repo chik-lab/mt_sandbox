@@ -567,7 +567,11 @@ class BacktestRunner:
                 print(data.iloc[-2:])
 
     def run_backtest(
-        self, run_id: str = None, dryrun: bool = False, clear_previous: bool = True, **kwargs: dict[str, Any]
+        self,
+        run_id: str = None,
+        dryrun: bool = False,
+        clear_previous: bool = True,
+        **kwargs: dict[str, Any],
     ) -> pd.Series | None:
         """Run backtest according to the trade plan and log the result to database.
 
@@ -617,19 +621,28 @@ class BacktestRunner:
             if clear_previous:
                 try:
                     # Import here to avoid circular imports
-                    import sys
                     import os
+                    import sys
+
                     # Add the algo directory to the path to import from utils
-                    algo_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'algo')
+                    algo_dir = os.path.join(
+                        os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+                        "algo",
+                    )
                     if algo_dir not in sys.path:
                         sys.path.insert(0, algo_dir)
-                    from utils.logging_setup import clear_previous_simulation_records_auto
+                    from utils.logging_setup import (
+                        clear_previous_simulation_records_auto,
+                    )
+
                     clear_previous_simulation_records_auto()
                 except ImportError as e:
-                    logging.getLogger(__name__).warning(f"Could not import cleanup function: {e}")
+                    logging.getLogger(__name__).warning(
+                        f"Could not import cleanup function: {e}"
+                    )
                 except Exception as e:
                     logging.getLogger(__name__).warning(f"Error during cleanup: {e}")
-            
+
             self.run_id = run_id if run_id else MTDB.uniqueid()
             self.code = StrategyManager.read(self.plan.strategy_file)
             self.strategy = StrategyManager.load(self.plan.strategy_file)

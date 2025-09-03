@@ -18,17 +18,14 @@ from bokeh.models import (
     CustomJS,
     DatetimeTickFormatter,
     HoverTool,
+    Label,
     Legend,
     LinearColorMapper,
     NumeralTickFormatter,
     Range1d,
     Span,
-    Label,
-    LinearAxis,
 )
 from bokeh.plotting import figure as _figure
-
-
 
 
 def _windos_safe_filename(filename):
@@ -176,9 +173,9 @@ def _open_html_external(file_path: str) -> None:
     """
     try:
         import os
+        import platform
         import shutil
         import subprocess
-        import platform
 
         abs_path = os.path.abspath(file_path)
 
@@ -1355,7 +1352,7 @@ return this.labels[index] || "";
         if symbol_fig.legend:
             symbol_fig.legend.visible = False
 
-    def _plot_separate_symbols(rising_wedge_data=None):
+    def _plot_separate_symbols():
         """Create separate combined OHLC+Volume charts for each symbol"""
         if baseline_multi is None:
             return []
@@ -1562,164 +1559,199 @@ return this.labels[index] || "";
                         legend_label=f"{symbol} Exits",
                     )
 
-            # Trade information can be accessed via the unified tooltip system
-
-            # ADD PHASE HIGHLIGHTING - updated for new _phase_completion_points structure
             if "completion_points" in phase_data:
                 completion_points = phase_data["completion_points"]
-                
+
                 if completion_points and len(completion_points) > 0:
-                    # Filter points for this symbol
-                    symbol_completion_points = [point for point in completion_points if point.get("ticker") == symbol]
-                    
+
+                    symbol_completion_points = [
+                        point
+                        for point in completion_points
+                        if point.get("ticker") == symbol
+                    ]
+
                     if symbol_completion_points:
-                        # Calculate price range for label positioning
-                        price_max = symbol_data[["High", "Low", "Open", "Close"]].max().max()
-                        price_min = symbol_data[["High", "Low", "Open", "Close"]].min().min()
+
+                        price_max = (
+                            symbol_data[["High", "Low", "Open", "Close"]].max().max()
+                        )
+                        price_min = (
+                            symbol_data[["High", "Low", "Open", "Close"]].min().min()
+                        )
                         price_range = price_max - price_min
 
-                        # Define colors for different phases
                         phase_colors = {
-                            0: "#F3533A",  # Vibrant red-orange - Detecting
-                            1: "#FA9F42",  # Bright orange - Consolidating  
-                            2: "#8AD879",  # Bright green - Breakout
-                            3: "#5ACFC9",  # Teal - Active Trading
-                            "completion": "#5ACFC9",  # Teal - Trade completion
-                            "timeout": "#9B59B6",  # Purple - Timeout
-                            "failure": "#E74C3C",  # Red - Failure
-                            "reset": "#95A5A6",   # Gray - Reset
+                            0: "#F3533A",
+                            1: "#FA9F42",
+                            2: "#8AD879",
+                            3: "#5ACFC9",
+                            "completion": "#5ACFC9",
+                            "timeout": "#9B59B6",
+                            "failure": "#E74C3C",
+                            "reset": "#95A5A6",
                         }
 
-                        # Define descriptive phase names
                         phase_names = {
-                            0: 'Detecting',
-                            1: 'Consolidating', 
-                            2: 'Breakout',
-                            3: 'Active Trading'
+                            0: "Detecting",
+                            1: "Consolidating",
+                            2: "Breakout",
+                            3: "Active Trading",
                         }
-                        
-                        # Sort completion points by bar_idx to ensure proper order
+
                         symbol_completion_points.sort(key=lambda x: x.get("bar_idx", 0))
-                        
-                        # Create phase ranges for highlighting
                         phase_ranges = []
-                        
-                        # Initialize tracking variables
-                        current_phase = 0  # Start with Phase 0 (Detecting)
+                        current_phase = 0
                         start_bar = 0
-                        
-                        # Process each completion point to build phase ranges
+
                         for _, point in enumerate(symbol_completion_points):
                             point_bar = point.get("bar_idx", 0)
                             point_phase = point.get("phase", "unknown")
-                            
-                            # Handle different types of phase transitions
+
                             if isinstance(point_phase, int) and 0 <= point_phase <= 3:
-                                # Regular phase transition
                                 if point_bar < len(symbol_data.index):
-                                    # Add the previous phase range if it exists (skip Phase 0 as it will be handled separately)
                                     if start_bar < point_bar and current_phase != 0:
-                                        phase_label = phase_names.get(current_phase, f'Phase {current_phase}')
-                                        phase_range = {
-                                            'start': start_bar,
-                                            'end': point_bar - 1,  # End BEFORE the transition point
-                                            'phase': current_phase,
-                                            'label': phase_label
-                                        }
-                                        phase_ranges.append(phase_range)                                    
-                                    # Update for next phase - start at the transition point
+                                        phase_label = phase_names.get(
+                                            current_phase, f"Phase {current_phase}"
+                                        )
+                                        end_bar = point_bar - 1
+                                        phase_duration = end_bar - start_bar
+                                        if phase_duration >= 1:
+                                            phase_range = {
+                                                "start": start_bar,
+                                                "end": end_bar,
+                                                "phase": current_phase,
+                                                "label": phase_label,
+                                            }
+                                            phase_ranges.append(phase_range)
+                                        elif phase_duration == 0:
+                                            phase_range = {
+                                                "start": start_bar,
+                                                "end": start_bar,
+                                                "phase": current_phase,
+                                                "label": phase_label,
+                                            }
+                                            phase_ranges.append(phase_range)
                                     start_bar = point_bar
                                     current_phase = point_phase
-                            
+
                             elif point_phase == "completion":
-                                # Trade completion - end the current phase
-                                if point_bar < len(symbol_data.index) and start_bar < point_bar:
-                                    phase_label = phase_names.get(current_phase, f'Phase {current_phase}')
-                                    phase_ranges.append({
-                                        'start': start_bar,
-                                        'end': point_bar,
-                                        'phase': current_phase,
-                                        'label': f'{phase_label} (Completed)'
-                                    })
+                                if (
+                                    point_bar < len(symbol_data.index)
+                                    and start_bar < point_bar
+                                ):
+                                    phase_label = phase_names.get(
+                                        current_phase, f"Phase {current_phase}"
+                                    )
+                                    phase_ranges.append(
+                                        {
+                                            "start": start_bar,
+                                            "end": point_bar,
+                                            "phase": current_phase,
+                                            "label": f"{phase_label} (Completed)",
+                                        }
+                                    )
                                     start_bar = point_bar
-                                    current_phase = 0  # Reset to detecting after completion
-                            
+                                    current_phase = 0
+
                             elif isinstance(point_phase, str):
                                 # Handle timeout, failure, reset events
                                 if point_phase.startswith("timeout_"):
-                                    failed_phase = int(point_phase.split("_")[1]) if point_phase.split("_")[1].isdigit() else current_phase
-                                    if point_bar < len(symbol_data.index) and start_bar < point_bar:
-                                        phase_ranges.append({
-                                            'start': start_bar,
-                                            'end': point_bar,
-                                            'phase': failed_phase,
-                                            'label': f'{phase_names.get(failed_phase, f"Phase {failed_phase}")} (Timeout)'
-                                        })
+                                    failed_phase = (
+                                        int(point_phase.split("_")[1])
+                                        if point_phase.split("_")[1].isdigit()
+                                        else current_phase
+                                    )
+                                    if (
+                                        point_bar < len(symbol_data.index)
+                                        and start_bar < point_bar
+                                    ):
+                                        phase_ranges.append(
+                                            {
+                                                "start": start_bar,
+                                                "end": point_bar,
+                                                "phase": failed_phase,
+                                                "label": f'{phase_names.get(failed_phase, f"Phase {failed_phase}")} (Timeout)',
+                                            }
+                                        )
                                     start_bar = point_bar
-                                    current_phase = 0  # Reset to detecting
-                                
-                                elif point_phase.startswith("failure_"):
-                                    failed_phase = int(point_phase.split("_")[1]) if point_phase.split("_")[1].isdigit() else current_phase
-                                    if point_bar < len(symbol_data.index) and start_bar < point_bar:
-                                        phase_ranges.append({
-                                            'start': start_bar,
-                                            'end': point_bar,
-                                            'phase': failed_phase,
-                                            'label': f'{phase_names.get(failed_phase, f"Phase {failed_phase}")} (Failed)'
-                                        })
-                                    start_bar = point_bar
-                                    current_phase = 0  # Reset to detecting
-                                
-                                elif point_phase.startswith("reset_"):
-                                    reset_phase = int(point_phase.split("_")[1]) if point_phase.split("_")[1].isdigit() else current_phase
-                                    if point_bar < len(symbol_data.index) and start_bar < point_bar:
-                                        phase_ranges.append({
-                                            'start': start_bar,
-                                            'end': point_bar,
-                                            'phase': reset_phase,
-                                            'label': f'{phase_names.get(reset_phase, f"Phase {reset_phase}")} (Reset)'
-                                        })
-                                    start_bar = point_bar
-                                    current_phase = 0  # Reset to detecting
-                        
-                        # Add final phase range if there's remaining data
-                        # Only add if current_phase is not 0 (Detecting) since Phase 0 should only be shown when qualifying
-                        if start_bar < len(symbol_data.index) - 1 and current_phase != 0:
-                            phase_label = phase_names.get(current_phase, f'Phase {current_phase}')
-                            final_phase_range = {
-                                'start': start_bar,
-                                'end': len(symbol_data.index) - 1,
-                                'phase': current_phase,
-                                'label': phase_label
-                            }
-                            phase_ranges.append(final_phase_range)
+                                    current_phase = 0
 
-                        elif start_bar < len(symbol_data.index) - 1 and current_phase == 0:
-                            pass
-                        
-                        # Add Detecting (Phase 0) segments based on indicator start time to hit time
-                        # Find all Phase 1 transitions and add Phase 0 before each
+                                elif point_phase.startswith("failure_"):
+                                    failed_phase = (
+                                        int(point_phase.split("_")[1])
+                                        if point_phase.split("_")[1].isdigit()
+                                        else current_phase
+                                    )
+                                    if (
+                                        point_bar < len(symbol_data.index)
+                                        and start_bar < point_bar
+                                    ):
+                                        phase_ranges.append(
+                                            {
+                                                "start": start_bar,
+                                                "end": point_bar,
+                                                "phase": failed_phase,
+                                                "label": f'{phase_names.get(failed_phase, f"Phase {failed_phase}")} (Failed)',
+                                            }
+                                        )
+                                    start_bar = point_bar
+                                    current_phase = 0
+
+                                elif point_phase.startswith("reset_"):
+                                    reset_phase = (
+                                        int(point_phase.split("_")[1])
+                                        if point_phase.split("_")[1].isdigit()
+                                        else current_phase
+                                    )
+                                    if (
+                                        point_bar < len(symbol_data.index)
+                                        and start_bar < point_bar
+                                    ):
+                                        phase_ranges.append(
+                                            {
+                                                "start": start_bar,
+                                                "end": point_bar,
+                                                "phase": reset_phase,
+                                                "label": f'{phase_names.get(reset_phase, f"Phase {reset_phase}")} (Reset)',
+                                            }
+                                        )
+                                    start_bar = point_bar
+                                    current_phase = 0
+
+                        if (
+                            start_bar < len(symbol_data.index) - 1
+                            and current_phase != 0
+                        ):
+                            phase_label = phase_names.get(
+                                current_phase, f"Phase {current_phase}"
+                            )
+                            end_bar = len(symbol_data.index) - 1
+
+                            if end_bar - start_bar >= 1:
+                                final_phase_range = {
+                                    "start": start_bar,
+                                    "end": end_bar,
+                                    "phase": current_phase,
+                                    "label": phase_label,
+                                }
+                                phase_ranges.append(final_phase_range)
+
                         phase1_transitions = [
-                            p for p in symbol_completion_points 
+                            p
+                            for p in symbol_completion_points
                             if isinstance(p.get("phase"), int) and p.get("phase") == 1
                         ]
-                        
                         for phase1_point in phase1_transitions:
                             phase1_bar = phase1_point.get("bar_idx", 0)
-                            
-                            # Use the stored qualifying timeframe if available, otherwise default to 20
                             selected_tf = phase1_point.get("qualifying_timeframe", 20)
-                            
-                            # Phase 0 (Detecting) should show from the qualifying timeframe start to hit time
                             start0 = max(0, phase1_bar - selected_tf)
-                            end0 = phase1_bar - 1  # End BEFORE the transition point
-                            
+                            end0 = phase1_bar - 1
                             if start0 < end0:
                                 phase0_range = {
-                                    'start': start0,
-                                    'end': end0,
-                                    'phase': 0,
-                                    'label': f'Detecting ({selected_tf}d gain)'
+                                    "start": start0,
+                                    "end": end0,
+                                    "phase": 0,
+                                    "label": f"Detecting ({selected_tf}d gain)",
                                 }
                                 phase_ranges.append(phase0_range)
 
@@ -1727,26 +1759,25 @@ return this.labels[index] || "";
                                 pass
                     else:
                         # No completion points for this symbol, show Phase 0 for entire range
-                        phase_ranges = [{
-                            'start': 0,
-                            'end': len(symbol_data.index) - 1,
-                            'phase': 0,
-                            'label': 'Detecting'
-                        }]
-                    
-                    
-                    
-                    # Plot phase highlights
+                        phase_ranges = [
+                            {
+                                "start": 0,
+                                "end": len(symbol_data.index) - 1,
+                                "phase": 0,
+                                "label": "Detecting",
+                            }
+                        ]
+
                     for phase_range in phase_ranges:
-                        if phase_range['start'] < phase_range['end'] and phase_range['end'] < len(symbol_data.index):
-                            phase_num = phase_range['phase']
+                        if phase_range["start"] <= phase_range["end"] and phase_range[
+                            "end"
+                        ] < len(symbol_data.index):
+                            phase_num = phase_range["phase"]
                             color = phase_colors.get(phase_num, "#CCCCCC")
-                            
-                            # Add phase highlight box
                             combined_fig.add_layout(
                                 BoxAnnotation(
-                                    left=phase_range['start'] - 0.5,
-                                    right=phase_range['end'] + 0.5,
+                                    left=phase_range["start"] - 0.5,
+                                    right=phase_range["end"] + 0.5,
                                     fill_color=color,
                                     fill_alpha=0.3,
                                     line_color=color,
@@ -1754,15 +1785,19 @@ return this.labels[index] || "";
                                     line_width=1,
                                 )
                             )
-                            
+
                             # Add phase label at the top of the chart
-                            label_x = int((phase_range['start'] + phase_range['end']) / 2)
-                            label_y = price_max + (price_range * 0.05)  # Position above the chart
-                            
+                            label_x = int(
+                                (phase_range["start"] + phase_range["end"]) / 2
+                            )
+                            label_y = price_max + (
+                                price_range * 0.05
+                            )  # Position above the chart
+
                             label = Label(
                                 x=label_x,
                                 y=label_y,
-                                text=phase_range['label'],
+                                text=phase_range["label"],
                                 text_color=color,
                                 text_font_size="12pt",
                                 text_font_style="bold",
@@ -1785,7 +1820,7 @@ return this.labels[index] || "";
             # Ensure ohlc_low/high exist on the per-symbol source
             ohlc_low_data = symbol_data[["High", "Low"]].min(1).reset_index(drop=True)
             ohlc_high_data = symbol_data[["High", "Low"]].max(1).reset_index(drop=True)
-            
+
             symbol_source.add(ohlc_low_data, "ohlc_low")
             symbol_source.add(ohlc_high_data, "ohlc_high")
 
@@ -1828,12 +1863,12 @@ return this.labels[index] || "";
                     ohlc_range.end = max + pad;
                 }
             }
-            """
+            """  # noqa: W293
 
             symbol_autoscale_cb = CustomJS(
                 args=symbol_js_args, code=symbol_autoscale_code
             )
-            
+
             combined_fig.x_range.js_on_change("start", symbol_autoscale_cb)
             combined_fig.x_range.js_on_change("end", symbol_autoscale_cb)
 
@@ -1881,10 +1916,13 @@ return this.labels[index] || "";
         # Extract rising wedge data from indicators if available
         higher_lows_wedge_data = None
         for indicator in indicators:
-            if hasattr(indicator, 'name') and 'higher_lows_wedge' in str(indicator.name).lower():
+            if (
+                hasattr(indicator, "name")
+                and "higher_lows_wedge" in str(indicator.name).lower()
+            ):
                 higher_lows_wedge_data = indicator.df
                 break
-        
+
         symbol_figs = _plot_separate_symbols(higher_lows_wedge_data)
         figs_below_ohlc.extend(symbol_figs)
 
@@ -1929,7 +1967,7 @@ return this.labels[index] || "";
             }
         }
     }, 50);
-    """
+    """  # noqa: W293
 
     const_cb = CustomJS(args=custom_js_args, code=main_autoscale_code)
     fig_ohlc.x_range.js_on_change("start", const_cb)
@@ -1956,13 +1994,19 @@ return this.labels[index] || "";
         merge_tools=True,
         **kwargs,  # type: ignore
     )
-    
+
     # Wrap in a layout with 5% horizontal padding
     from bokeh.layouts import column
+
     fig = column(
         main_plot,
         width_policy="max",
-        margin=(0, int(plot_width * 0.05) if plot_width else 60, 0, int(plot_width * 0.05) if plot_width else 60)  # (top, right, bottom, left) - 5% horizontal padding
+        margin=(
+            0,
+            int(plot_width * 0.05) if plot_width else 60,
+            0,
+            int(plot_width * 0.05) if plot_width else 60,
+        ),  # (top, right, bottom, left) - 5% horizontal padding
     )
     # Persist and/or open depending on configuration
     if processed_filename:
@@ -1971,7 +2015,9 @@ return this.labels[index] || "";
 
         # Save to file
         import os
+
         from bokeh.io import save
+
         dir_path = os.path.dirname(processed_filename)
         if dir_path and not os.path.exists(dir_path):
             os.makedirs(dir_path, exist_ok=True)
@@ -2077,14 +2123,14 @@ def plot_heatmaps(
     if processed_filename:
         # Save to file
         import os
+
         from bokeh.io import save
 
-        
         dir_path = os.path.dirname(processed_filename)
         if dir_path and not os.path.exists(dir_path):
             os.makedirs(dir_path, exist_ok=True)
         save(fig, processed_filename)
-        
+
         # Open if requested (avoid Bokeh show double-write)
         if open_browser:
             _open_html_external(processed_filename)
