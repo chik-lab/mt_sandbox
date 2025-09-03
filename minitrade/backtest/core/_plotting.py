@@ -1580,7 +1580,7 @@ return this.labels[index] || "";
 
                         # Define colors for different phases
                         phase_colors = {
-                            0: "#F3533A",  # Vibrant red-orange - Screening
+                            0: "#F3533A",  # Vibrant red-orange - Detecting
                             1: "#FA9F42",  # Bright orange - Consolidating  
                             2: "#8AD879",  # Bright green - Breakout
                             3: "#5ACFC9",  # Teal - Active Trading
@@ -1592,7 +1592,7 @@ return this.labels[index] || "";
 
                         # Define descriptive phase names
                         phase_names = {
-                            0: 'Screening',
+                            0: 'Detecting',
                             1: 'Consolidating', 
                             2: 'Breakout',
                             3: 'Active Trading'
@@ -1605,7 +1605,7 @@ return this.labels[index] || "";
                         phase_ranges = []
                         
                         # Initialize tracking variables
-                        current_phase = 0  # Start with Phase 0 (Screening)
+                        current_phase = 0  # Start with Phase 0 (Detecting)
                         start_bar = 0
                         
                         # Process each completion point to build phase ranges
@@ -1642,7 +1642,7 @@ return this.labels[index] || "";
                                         'label': f'{phase_label} (Completed)'
                                     })
                                     start_bar = point_bar
-                                    current_phase = 0  # Reset to screening after completion
+                                    current_phase = 0  # Reset to detecting after completion
                             
                             elif isinstance(point_phase, str):
                                 # Handle timeout, failure, reset events
@@ -1656,7 +1656,7 @@ return this.labels[index] || "";
                                             'label': f'{phase_names.get(failed_phase, f"Phase {failed_phase}")} (Timeout)'
                                         })
                                     start_bar = point_bar
-                                    current_phase = 0  # Reset to screening
+                                    current_phase = 0  # Reset to detecting
                                 
                                 elif point_phase.startswith("failure_"):
                                     failed_phase = int(point_phase.split("_")[1]) if point_phase.split("_")[1].isdigit() else current_phase
@@ -1668,7 +1668,7 @@ return this.labels[index] || "";
                                             'label': f'{phase_names.get(failed_phase, f"Phase {failed_phase}")} (Failed)'
                                         })
                                     start_bar = point_bar
-                                    current_phase = 0  # Reset to screening
+                                    current_phase = 0  # Reset to detecting
                                 
                                 elif point_phase.startswith("reset_"):
                                     reset_phase = int(point_phase.split("_")[1]) if point_phase.split("_")[1].isdigit() else current_phase
@@ -1680,10 +1680,10 @@ return this.labels[index] || "";
                                             'label': f'{phase_names.get(reset_phase, f"Phase {reset_phase}")} (Reset)'
                                         })
                                     start_bar = point_bar
-                                    current_phase = 0  # Reset to screening
+                                    current_phase = 0  # Reset to detecting
                         
                         # Add final phase range if there's remaining data
-                        # Only add if current_phase is not 0 (Screening) since Phase 0 should only be shown when qualifying
+                        # Only add if current_phase is not 0 (Detecting) since Phase 0 should only be shown when qualifying
                         if start_bar < len(symbol_data.index) - 1 and current_phase != 0:
                             phase_label = phase_names.get(current_phase, f'Phase {current_phase}')
                             final_phase_range = {
@@ -1697,7 +1697,7 @@ return this.labels[index] || "";
                         elif start_bar < len(symbol_data.index) - 1 and current_phase == 0:
                             pass
                         
-                        # Add Screening (Phase 0) segments based on indicator start time to hit time
+                        # Add Detecting (Phase 0) segments based on indicator start time to hit time
                         # Find all Phase 1 transitions and add Phase 0 before each
                         phase1_transitions = [
                             p for p in symbol_completion_points 
@@ -1710,7 +1710,7 @@ return this.labels[index] || "";
                             # Use the stored qualifying timeframe if available, otherwise default to 20
                             selected_tf = phase1_point.get("qualifying_timeframe", 20)
                             
-                            # Phase 0 (Screening) should show from the qualifying timeframe start to hit time
+                            # Phase 0 (Detecting) should show from the qualifying timeframe start to hit time
                             start0 = max(0, phase1_bar - selected_tf)
                             end0 = phase1_bar - 1  # End BEFORE the transition point
                             
@@ -1719,7 +1719,7 @@ return this.labels[index] || "";
                                     'start': start0,
                                     'end': end0,
                                     'phase': 0,
-                                    'label': f'Screening ({selected_tf}d gain)'
+                                    'label': f'Detecting ({selected_tf}d gain)'
                                 }
                                 phase_ranges.append(phase0_range)
 
@@ -1731,7 +1731,7 @@ return this.labels[index] || "";
                             'start': 0,
                             'end': len(symbol_data.index) - 1,
                             'phase': 0,
-                            'label': 'Screening'
+                            'label': 'Detecting'
                         }]
                     
                     
@@ -1879,13 +1879,13 @@ return this.labels[index] || "";
     symbol_figs = []
     if baseline_multi is not None:
         # Extract rising wedge data from indicators if available
-        rising_wedge_data = None
+        higher_lows_wedge_data = None
         for indicator in indicators:
-            if hasattr(indicator, 'name') and 'rising_wedge' in str(indicator.name).lower():
-                rising_wedge_data = indicator.df
+            if hasattr(indicator, 'name') and 'higher_lows_wedge' in str(indicator.name).lower():
+                higher_lows_wedge_data = indicator.df
                 break
         
-        symbol_figs = _plot_separate_symbols(rising_wedge_data)
+        symbol_figs = _plot_separate_symbols(higher_lows_wedge_data)
         figs_below_ohlc.extend(symbol_figs)
 
     set_tooltips(fig_ohlc, ohlc_tooltips, vline=True, renderers=[first_line])
