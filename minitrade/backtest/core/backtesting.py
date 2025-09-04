@@ -1139,6 +1139,7 @@ class Order:
         stop_price: Optional[float] = None,
         sl_price: Optional[float] = None,
         tp_price: Optional[float] = None,
+        ADR_gain_price_gate: Optional[Tuple[float, float]] = None,
         parent_trade: Optional["Trade"] = None,
         entry_time: datetime = None,
         tag: object = None,
@@ -1151,6 +1152,7 @@ class Order:
         self.__stop_price = stop_price
         self.__sl_price = sl_price
         self.__tp_price = tp_price
+        self.__ADR_gain_price_gate = ADR_gain_price_gate
         self.__parent_trade = parent_trade
         self.__entry_time = entry_time
         self.__tag = tag
@@ -1171,6 +1173,7 @@ class Order:
                     ("sl", self.__sl_price),
                     ("tp", self.__tp_price),
                     ("contingent", self.is_contingent),
+                    ("ADR_gain_price_gate", self.__ADR_gain_price_gate),
                 )
                 if value is not None
             )
@@ -1250,6 +1253,16 @@ class Order:
         """
         return self.__tp_price
 
+    @property
+    def ADR_gain_gate(self) -> Optional[Tuple[float, float]]:
+        """
+        ADR gain price gate at which, if set, a new contingent limit order
+        will be placed upon the `Trade` following this order's execution.
+        Format: (price, fraction)
+        """
+        return self.__ADR_gain_price_gate
+
+    
     @property
     def parent_trade(self):
         return self.__parent_trade
@@ -1707,7 +1720,7 @@ class _Broker:
                     f"TP ({tp}) < LIMIT ({limit or stop or adjusted_price}) < SL ({sl})"
                 )
 
-        order = Order(self, ticker, size, limit, stop, sl, tp, trade, self.now, tag=tag)
+        order = Order(self, ticker, size, limit, stop, sl, tp, ADR_gain_price_gate=None, parent_trade=trade, entry_time=self.now, tag=tag)
         # Put the new order in the order queue,
         # inserting SL/TP/trade-closing orders in-front
         if trade:

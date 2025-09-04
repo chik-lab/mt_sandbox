@@ -5,7 +5,7 @@ import warnings
 from colorsys import hls_to_rgb, rgb_to_hls
 from functools import partial
 from itertools import combinations, cycle
-from typing import Callable, List, Union
+from typing import Callable, List, Union, Dict
 
 import numpy as np
 import pandas as pd
@@ -1923,7 +1923,7 @@ return this.labels[index] || "";
                 higher_lows_wedge_data = indicator.df
                 break
 
-        symbol_figs = _plot_separate_symbols(higher_lows_wedge_data)
+        symbol_figs = _plot_separate_symbols()
         figs_below_ohlc.extend(symbol_figs)
 
     set_tooltips(fig_ohlc, ohlc_tooltips, vline=True, renderers=[first_line])

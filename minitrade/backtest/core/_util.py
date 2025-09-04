@@ -139,9 +139,7 @@ class _Data:
             | {ticker: self.__df[ticker] for ticker in self.__df.columns.levels[0]}
             | {
                 None: (
-                    self.__df[self.the_ticker]
-                    if len(self.__tickers) == 1
-                    else self.__df
+                    self.__df
                 )
             }
             | {"__index": self.__df.index.copy()}
@@ -163,7 +161,8 @@ class _Data:
 
     @property
     def df(self) -> pd.DataFrame:
-        df_ = self.__df[self.the_ticker] if len(self.tickers) == 1 else self.__df
+        # Always preserve MultiIndex structure for consistency
+        df_ = self.__df
         return df_.iloc[: self.__i] if self.__i < len(df_) else df_
 
     @property
