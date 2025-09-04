@@ -1642,10 +1642,36 @@ return this.labels[index] || "";
                                     phase_label = phase_names.get(
                                         current_phase, f"Phase {current_phase}"
                                     )
+                                    
+                                    # Adjust phase highlight end for trade_on_close timing
+                                    adjusted_end_bar = point_bar
+                                    point_label = point.get("label", "")
+                                    
+                                    # Check if broker has trade_on_close=True and this is an exit event
+                                    try:
+                                        strategy_instance = results.get("_strategy")
+                                        if (strategy_instance and 
+                                            hasattr(strategy_instance, "_broker") and 
+                                            hasattr(strategy_instance._broker, "_trade_on_close") and
+                                            strategy_instance._broker._trade_on_close):
+                                            
+                                            # Check for exit-related completion events
+                                            is_exit_event = any(keyword in point_label for keyword in [
+                                                "EXIT TIMEOUT", "exit timeout", "Position closed"
+                                            ])
+                                            
+                                            if is_exit_event:
+                                                # Remove one day for exit events when trade_on_close=True
+                                                # to align phase highlight with actual trade exit timing
+                                                adjusted_end_bar = max(start_bar, point_bar - 1)
+                                    except (AttributeError, KeyError):
+                                        # If we can't access broker settings, use original behavior
+                                        pass
+                                    
                                     phase_ranges.append(
                                         {
                                             "start": start_bar,
-                                            "end": point_bar,
+                                            "end": adjusted_end_bar,
                                             "phase": current_phase,
                                             "label": f"{phase_label} (Completed)",
                                         }
