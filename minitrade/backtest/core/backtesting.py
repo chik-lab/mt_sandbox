@@ -788,6 +788,7 @@ class Strategy(ABC):
         sl: Optional[float] = None,
         tp: Optional[float] = None,
         tag: object = None,
+        parent_trade: Optional["Trade"] = None,
     ):
         """
         Place a new long order. For explanation of parameters, see `Order` and its properties.
@@ -801,7 +802,7 @@ class Strategy(ABC):
         assert (
             0 < size < 1 or round(size) == size
         ), "size must be a positive fraction of equity, or a positive whole number of units"
-        return self._broker.new_order(ticker, size, limit, stop, sl, tp, tag)
+        return self._broker.new_order(ticker, size, limit, stop, sl, tp, tag, trade=parent_trade)
 
     def sell(
         self,
@@ -813,6 +814,7 @@ class Strategy(ABC):
         sl: Optional[float] = None,
         tp: Optional[float] = None,
         tag: object = None,
+        parent_trade: Optional["Trade"] = None,
     ):
         """
         Place a new short order. For explanation of parameters, see `Order` and its properties.
@@ -828,7 +830,7 @@ class Strategy(ABC):
         assert (
             0 < size < 1 or round(size) == size
         ), "size must be a positive fraction of equity, or a positive whole number of units"
-        return self._broker.new_order(ticker, -size, limit, stop, sl, tp, tag)
+        return self._broker.new_order(ticker, -size, limit, stop, sl, tp, tag, trade=parent_trade)
 
     def rebalance(
         self,

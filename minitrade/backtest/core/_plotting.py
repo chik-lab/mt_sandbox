@@ -1484,80 +1484,81 @@ return this.labels[index] || "";
                 )
             )
 
-            # Add trade markers for this specific symbol
+            # Filter trades for this specific symbol (used for both trade markers and phase highlights)
+            symbol_trades = pd.DataFrame()  # Default empty DataFrame
             if not trades.empty and "Ticker" in trades.columns:
-                # Filter trades for this symbol
                 symbol_trades = trades[trades["Ticker"] == symbol].copy()
 
-                if not symbol_trades.empty:
-                    # Create trade source for this symbol
-                    symbol_trade_source = ColumnDataSource(
-                        dict(
-                            entry_bar=symbol_trades["EntryBar"],
-                            exit_bar=symbol_trades["ExitBar"],
-                            entry_price=symbol_trades["EntryPrice"],
-                            exit_price=symbol_trades["ExitPrice"],
-                            entry_time=symbol_trades["EntryTime"],
-                            exit_time=symbol_trades["ExitTime"],
-                            size=symbol_trades["Size"],
-                            pnl=symbol_trades["PnL"],
-                            return_pct=symbol_trades["Gross%"],
-                            returns_positive=(symbol_trades["Gross%"] > 0)
-                            .astype(int)
-                            .astype(str),
-                        )
+            # Add trade markers for this specific symbol
+            if not symbol_trades.empty:
+                # Create trade source for this symbol
+                symbol_trade_source = ColumnDataSource(
+                    dict(
+                        entry_bar=symbol_trades["EntryBar"],
+                        exit_bar=symbol_trades["ExitBar"],
+                        entry_price=symbol_trades["EntryPrice"],
+                        exit_price=symbol_trades["ExitPrice"],
+                        entry_time=symbol_trades["EntryTime"],
+                        exit_time=symbol_trades["ExitTime"],
+                        size=symbol_trades["Size"],
+                        pnl=symbol_trades["PnL"],
+                        return_pct=symbol_trades["Gross%"],
+                        returns_positive=(symbol_trades["Gross%"] > 0)
+                        .astype(int)
+                        .astype(str),
                     )
+                )
 
-                    # Add position lines (entry to exit)
-                    symbol_trade_source.add(
-                        symbol_trades[["EntryBar", "ExitBar"]].to_numpy().tolist(),
-                        "position_lines_xs",
-                    )
-                    symbol_trade_source.add(
-                        symbol_trades[["EntryPrice", "ExitPrice"]].to_numpy().tolist(),
-                        "position_lines_ys",
-                    )
+                # Add position lines (entry to exit)
+                symbol_trade_source.add(
+                    symbol_trades[["EntryBar", "ExitBar"]].to_numpy().tolist(),
+                    "position_lines_xs",
+                )
+                symbol_trade_source.add(
+                    symbol_trades[["EntryPrice", "ExitPrice"]].to_numpy().tolist(),
+                    "position_lines_ys",
+                )
 
-                    # Plot position lines
-                    combined_fig.multi_line(
-                        xs="position_lines_xs",
-                        ys="position_lines_ys",
-                        source=symbol_trade_source,
-                        line_color=factor_cmap(
-                            "returns_positive", ["red", "green"], ["0", "1"]
-                        ),
-                        line_width=3,
-                        line_alpha=0.8,
-                        line_dash="solid",
-                    )
+                # Plot position lines
+                combined_fig.multi_line(
+                    xs="position_lines_xs",
+                    ys="position_lines_ys",
+                    source=symbol_trade_source,
+                    line_color=factor_cmap(
+                        "returns_positive", ["red", "green"], ["0", "1"]
+                    ),
+                    line_width=3,
+                    line_alpha=0.8,
+                    line_dash="solid",
+                )
 
-                    # Plot entry markers (triangles pointing up) - colored by trade outcome
-                    combined_fig.scatter(
-                        "entry_bar",
-                        "entry_price",
-                        source=symbol_trade_source,
-                        marker="triangle",
-                        size=10,
-                        color=factor_cmap(
-                            "returns_positive", ["red", "green"], ["0", "1"]
-                        ),
-                        alpha=0.8,
-                        legend_label=f"{symbol} Entries",
-                    )
+                # Plot entry markers (triangles pointing up) - colored by trade outcome
+                combined_fig.scatter(
+                    "entry_bar",
+                    "entry_price",
+                    source=symbol_trade_source,
+                    marker="triangle",
+                    size=10,
+                    color=factor_cmap(
+                        "returns_positive", ["red", "green"], ["0", "1"]
+                    ),
+                    alpha=0.8,
+                    legend_label=f"{symbol} Entries",
+                )
 
-                    # Plot exit markers (triangles pointing down) - colored by trade outcome
-                    combined_fig.scatter(
-                        "exit_bar",
-                        "exit_price",
-                        source=symbol_trade_source,
-                        marker="inverted_triangle",
-                        size=10,
-                        color=factor_cmap(
-                            "returns_positive", ["red", "green"], ["0", "1"]
-                        ),
-                        alpha=0.8,
-                        legend_label=f"{symbol} Exits",
-                    )
+                # Plot exit markers (triangles pointing down) - colored by trade outcome
+                combined_fig.scatter(
+                    "exit_bar",
+                    "exit_price",
+                    source=symbol_trade_source,
+                    marker="inverted_triangle",
+                    size=10,
+                    color=factor_cmap(
+                        "returns_positive", ["red", "green"], ["0", "1"]
+                    ),
+                    alpha=0.8,
+                    legend_label=f"{symbol} Exits",
+                )
 
             if "completion_points" in phase_data:
                 completion_points = phase_data["completion_points"]
@@ -1643,39 +1644,27 @@ return this.labels[index] || "";
                                         current_phase, f"Phase {current_phase}"
                                     )
                                     
-                                    # Adjust phase highlight end for trade_on_close timing
-                                    adjusted_end_bar = point_bar
+                                    # Use actual trade exit bar instead of delayed phase completion bar
+                                    adjusted_end_bar = point_bar  # Default fallback
                                     point_label = point.get("label", "")
                                     
-                                    # Check if broker has trade_on_close=True and this is an exit event
-                                    try:
-                                        strategy_instance = results.get("_strategy")
-                                        if (strategy_instance and 
-                                            hasattr(strategy_instance, "_broker") and 
-                                            hasattr(strategy_instance._broker, "_trade_on_close") and
-                                            strategy_instance._broker._trade_on_close):
-                                            
-                                            # Check for exit-related completion events
-                                            is_exit_event = any(keyword in point_label for keyword in [
-                                                "EXIT TIMEOUT", "exit timeout", "Position closed"
-                                            ])
-                                            
-                                            if is_exit_event:
-                                                # Remove one day for exit events when trade_on_close=True
-                                                # to align phase highlight with actual trade exit timing
-                                                adjusted_end_bar = max(start_bar, point_bar - 1)
-                                    except (AttributeError, KeyError):
-                                        # If we can't access broker settings, use original behavior
-                                        pass
+                                    # For completion events, find the actual trade exit bar
+                                    if not symbol_trades.empty:
+                                        # Find the trade that corresponds to this completion event
+                                        # Look for trades that exit before or at the phase completion bar
+                                        relevant_trades = symbol_trades[symbol_trades["ExitBar"] <= point_bar]
+                                        if not relevant_trades.empty:
+                                            # Use the most recent trade exit bar
+                                            actual_exit_bar = relevant_trades["ExitBar"].max()
+                                            adjusted_end_bar = actual_exit_bar
                                     
-                                    phase_ranges.append(
-                                        {
-                                            "start": start_bar,
-                                            "end": adjusted_end_bar,
-                                            "phase": current_phase,
-                                            "label": f"{phase_label} (Completed)",
-                                        }
-                                    )
+                                    phase_range = {
+                                        "start": start_bar,
+                                        "end": adjusted_end_bar,
+                                        "phase": current_phase,
+                                        "label": f"{phase_label} (Completed)",
+                                    }
+                                    phase_ranges.append(phase_range)
                                     start_bar = point_bar
                                     current_phase = 0
 
@@ -1784,15 +1773,18 @@ return this.labels[index] || "";
                             else:
                                 pass
                     else:
-                        # No completion points for this symbol, show Phase 0 for entire range
-                        phase_ranges = [
-                            {
-                                "start": 0,
-                                "end": len(symbol_data.index) - 1,
-                                "phase": 0,
-                                "label": "Detecting",
-                            }
-                        ]
+                        # No completion points for this symbol - only show phase if there are trades
+                        if not symbol_trades.empty:
+                            phase_ranges = [
+                                {
+                                    "start": 0,
+                                    "end": len(symbol_data.index) - 1,
+                                    "phase": 0,
+                                    "label": "Detecting",
+                                }
+                            ]
+                        else:
+                            phase_ranges = []
 
                     for phase_range in phase_ranges:
                         if phase_range["start"] <= phase_range["end"] and phase_range[
