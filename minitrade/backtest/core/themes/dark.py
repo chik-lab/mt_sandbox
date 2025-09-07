@@ -20,11 +20,11 @@ class DarkTheme(BaseTheme):
     
     @property
     def background_fill_color(self) -> str:
-        return "#000000"
+        return "#131722"
     
     @property
     def border_fill_color(self) -> str:
-        return "#000000"
+        return "#131722"
     
     @property
     def grid_line_color(self) -> str:
@@ -76,7 +76,7 @@ class DarkTheme(BaseTheme):
     
     @property
     def nan_color(self) -> str:
-        return "#000000"
+        return "#131722"
     
     @property
     def bull_color(self) -> str:

@@ -32,11 +32,11 @@ class LightTheme(BaseTheme):
     
     @property
     def axis_line_color(self) -> str:
-        return "#000000"
+        return "#131722"
     
     @property
     def major_tick_line_color(self) -> str:
-        return "#000000"
+        return "#131722"
     
     @property
     def minor_tick_line_color(self) -> str:
@@ -44,15 +44,15 @@ class LightTheme(BaseTheme):
     
     @property
     def axis_label_text_color(self) -> str:
-        return "#000000"
+        return "#131722"
     
     @property
     def major_label_text_color(self) -> str:
-        return "#000000"
+        return "#131722"
     
     @property
     def title_text_color(self) -> str:
-        return "#000000"
+        return "#131722"
     
     @property
     def legend_background_fill_color(self) -> str:
@@ -64,7 +64,7 @@ class LightTheme(BaseTheme):
     
     @property
     def legend_label_text_color(self) -> str:
-        return "#000000"
+        return "#131722"
     
     @property
     def color_palette(self) -> List[str]:

@@ -40,12 +40,12 @@ LIGHT_PALETTE = [
 # Bull/Bear colors for different themes
 BULL_BEAR_COLORS = {
     'light': {
-        'bull': '#228B22',  # Forest green
-        'bear': '#FF4500',  # Orange red
+        'bull': '#26a69a', 
+        'bear': '#ef5350', 
     },
     'dark': {
-        'bull': '#00FF7F',  # Spring green (brighter)
-        'bear': '#FF6347',  # Tomato (softer red)
+        'bull': '#26a69a', 
+        'bear': '#ef5350',
     }
 }
 

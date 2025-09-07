@@ -1049,10 +1049,11 @@ return this.labels[index] || "";
         df2["inc"] = (df2.Close >= df2.Open).astype(int).astype(str)
         df2.index.name = None
         source2 = ColumnDataSource(df2)
-        fig_ohlc.segment(
-            "index", "High", "index", "Low", source=source2, color="#bbbbbb"
-        )
         colors_lighter = [lightness(BEAR_COLOR, 0.92), lightness(BULL_COLOR, 0.92)]
+        fig_ohlc.segment(
+            "index", "High", "index", "Low", source=source2, 
+            color=factor_cmap("inc", colors_lighter, ["0", "1"])
+        )
         fig_ohlc.vbar(
             "index",
             "_width",
@@ -1485,18 +1486,18 @@ return this.labels[index] || "";
                 "inc",
             )
 
-            # Create combined OHLC+Volume figure
-            combined_fig = new_bokeh_figure(
-                title=f"{symbol} OHLC + Volume",
-                height=500,  # Taller to accommodate both OHLC and volume
+            # Create OHLC figure (without volume)
+            ohlc_fig = new_bokeh_figure(
+                title=f"{symbol} OHLC",
+                height=400,  # Standard height for OHLC only
                 x_range=fig_ohlc.x_range,  # Share x-axis with main chart
             )
 
             # Apply datetime formatting to x-axis (same as main chart)
             if is_datetime_index:
-                combined_fig.xaxis.formatter = CustomJSTickFormatter(
+                ohlc_fig.xaxis.formatter = CustomJSTickFormatter(
                     args=dict(
-                        axis=combined_fig.xaxis[0],
+                        axis=ohlc_fig.xaxis[0],
                         formatter=DatetimeTickFormatter(
                             days="%a, %d %b", months="%m/%Y"
                         ),
@@ -1510,79 +1511,58 @@ return this.labels[index] || "";
 """,
                 )
 
-            # Plot OHLC bars in the upper portion
-            combined_fig.segment(
-                "index", "High", "index", "Low", source=symbol_source, color="black"
+            # Plot OHLC bars with color-matched high-low lines
+            ohlc_fig.segment(
+                "index", "High", "index", "Low", source=symbol_source, 
+                color=factor_cmap("inc", COLORS, ["0", "1"])
             )
-            ohlc_bars = combined_fig.vbar(
+            ohlc_bars = ohlc_fig.vbar(
                 "index",
                 BAR_WIDTH,
                 "Open",
                 "Close",
                 source=symbol_source,
-                line_color="black",
+                line_color=factor_cmap("inc", COLORS, ["0", "1"]),
                 fill_color=factor_cmap("inc", COLORS, ["0", "1"]),
             )
 
             # No static legend needed - all OHLCV and indicator values are shown dynamically in tooltips
 
-            # Calculate volume range for scaling
-            # Use dollar volume (volume * close price) for better market representation
-            dollar_volume = symbol_data["Volume"] * symbol_data["Close"]
-            volume_max = dollar_volume.max()
-
-            # Scale volume to appear at bottom (e.g., 15% of price range) - reduced from 20% to prevent overlap
-            price_max = symbol_data[["High", "Low", "Open", "Close"]].max().max()
-            price_min = symbol_data[["High", "Low", "Open", "Close"]].min().min()
-            price_range = price_max - price_min
-
-            # Scale volume to fit nicely in the bottom section without being too small
-            volume_scale_factor = (
-                (price_range * 0.2) / volume_max if volume_max > 0 else 1
+            # Create separate Volume figure
+            volume_fig = new_bokeh_figure(
+                title=f"{symbol} Volume",
+                height=150,  # Smaller height for volume
+                x_range=ohlc_fig.x_range,  # Share x-axis with OHLC chart
+                y_axis_label="Volume",
             )
-
-            # Position volume below price with minimal gap
-            buffer_zone = price_range * 0.05  # Small 5% gap
-            volume_bottom = price_min - buffer_zone
-
-            symbol_data["Volume_scaled"] = (
-                dollar_volume * volume_scale_factor + volume_bottom
-            )
-
-            # Update source with scaled volume
-            symbol_source.add(symbol_data["Volume_scaled"], "Volume_scaled")
+            
+            # Apply datetime formatting to volume chart x-axis
+            if is_datetime_index:
+                volume_fig.xaxis.formatter = ohlc_fig.xaxis[0].formatter
+            
+            # Hide OHLC x-axis, show only volume x-axis
+            ohlc_fig.xaxis.visible = False
+            volume_fig.xaxis.visible = True
 
             # Add the columns that the autoscaling callback expects
             symbol_source.add(symbol_data["High"], "ohlc_high")
             symbol_source.add(symbol_data["Low"], "ohlc_low")
 
-            # Plot volume bars at the bottom using scaled volume
-            combined_fig.vbar(
+            # Plot volume bars in separate chart
+            volume_bars = volume_fig.vbar(
                 "index",
                 BAR_WIDTH,
-                "Volume_scaled",
-                volume_bottom,
+                "Volume",
+                0,  # Start from zero
                 source=symbol_source,
                 line_color="black",
                 fill_color=factor_cmap("inc", COLORS, ["0", "1"]),
-                alpha=0.5,  # Make volume bars more transparent for better separation
+                alpha=0.7,
             )
-
-            # Tooltips will be handled by the unified tooltip system in _create_unified_legend
-
-            # Add a horizontal line to separate OHLC from volume
-            separator_y = (
-                price_min - buffer_zone
-            )  # Position separator at the buffer zone
-            combined_fig.add_layout(
-                Span(
-                    location=separator_y,
-                    dimension="width",
-                    line_color="gray",
-                    line_dash="dashed",
-                    line_width=1,
-                )
-            )
+            
+            # Add volume tooltips
+            set_tooltips(volume_fig, [("Volume", "@Volume{0,0}")], renderers=[volume_bars])
+            volume_fig.yaxis.formatter = NumeralTickFormatter(format="0 a")
 
             # Filter trades for this specific symbol (used for both trade markers and phase highlights)
             symbol_trades = pd.DataFrame()  # Default empty DataFrame
@@ -1620,7 +1600,7 @@ return this.labels[index] || "";
                 )
 
                 # Plot position lines
-                combined_fig.multi_line(
+                ohlc_fig.multi_line(
                     xs="position_lines_xs",
                     ys="position_lines_ys",
                     source=symbol_trade_source,
@@ -1633,7 +1613,7 @@ return this.labels[index] || "";
                 )
 
                 # Plot entry markers (triangles pointing up) - colored by trade outcome
-                combined_fig.scatter(
+                ohlc_fig.scatter(
                     "entry_bar",
                     "entry_price",
                     source=symbol_trade_source,
@@ -1647,7 +1627,7 @@ return this.labels[index] || "";
                 )
 
                 # Plot exit markers (triangles pointing down) - colored by trade outcome
-                combined_fig.scatter(
+                ohlc_fig.scatter(
                     "exit_bar",
                     "exit_price",
                     source=symbol_trade_source,
@@ -1675,7 +1655,7 @@ return this.labels[index] || "";
                 )
                 
                 # Render phase highlights using the new function
-                render_phase_highlights_with_data(combined_fig, phase_ranges, price_max, price_range)
+                render_phase_highlights_with_data(ohlc_fig, phase_ranges, price_max, price_range)
 
             # Plot wedge trend lines if available
             if hasattr(results.get('_strategy'), 'higher_lows_wedge'):
@@ -1685,7 +1665,7 @@ return this.labels[index] || "";
                 
                 # Pass all required data instead of strategy object
                 plot_wedge_trend_lines(
-                    combined_fig, 
+                    ohlc_fig, 
                     symbol, 
                     wedge_data, 
                     phase_data,  # Already available in _plotting.py
@@ -1693,7 +1673,7 @@ return this.labels[index] || "";
 
             # Create unified legend with OHLCV + indicators - do this LAST to override any automatic tooltips
             _create_unified_legend(
-                combined_fig, symbol, symbol_source, indicators, ohlc_bars
+                ohlc_fig, symbol, symbol_source, indicators, ohlc_bars
             )
 
             # Per-symbol autoscale on zoom/pan: compute lows/highs and wire callback to shared x_range
@@ -1705,7 +1685,7 @@ return this.labels[index] || "";
             symbol_source.add(ohlc_high_data, "ohlc_high")
 
             # Add individual y-axis autoscaling for this symbol chart
-            symbol_js_args = dict(ohlc_range=combined_fig.y_range, source=symbol_source)
+            symbol_js_args = dict(ohlc_range=ohlc_fig.y_range, source=symbol_source)
             # Clean autoscaling callback for individual symbol charts
             symbol_autoscale_code = """
             // Enforce strict x-axis limits to prevent zooming out beyond data
@@ -1749,10 +1729,12 @@ return this.labels[index] || "";
                 args=symbol_js_args, code=symbol_autoscale_code
             )
 
-            combined_fig.x_range.js_on_change("start", symbol_autoscale_cb)
-            combined_fig.x_range.js_on_change("end", symbol_autoscale_cb)
+            ohlc_fig.x_range.js_on_change("start", symbol_autoscale_cb)
+            ohlc_fig.x_range.js_on_change("end", symbol_autoscale_cb)
 
-            symbol_figs.append(combined_fig)
+            # Add both OHLC and Volume figures for this symbol
+            symbol_figs.append(ohlc_fig)
+            symbol_figs.append(volume_fig)
 
         return symbol_figs
 
