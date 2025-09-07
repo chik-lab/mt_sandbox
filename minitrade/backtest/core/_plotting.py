@@ -1441,14 +1441,26 @@ return this.labels[index] || "";
             symbol_fig.legend.visible = False
 
     def _plot_separate_symbols():
-        """Create separate combined OHLC+Volume charts for each symbol"""
+        """Create separate combined OHLC+Volume charts for each symbol that has trades"""
         if baseline_multi is None:
             return []
 
-        symbols = baseline_multi.columns.get_level_values(0).unique()
+        # Get all available symbols
+        all_symbols = baseline_multi.columns.get_level_values(0).unique()
+        
+        # Filter to only symbols that have trades
+        if traded_tickers:
+            symbols_to_plot = [symbol for symbol in all_symbols if symbol in traded_tickers]
+            if not symbols_to_plot:
+                # No symbols have trades, return empty list
+                return []
+        else:
+            # If no traded tickers info, plot all symbols (fallback)
+            symbols_to_plot = all_symbols
+        
         symbol_figs = []
 
-        for symbol in symbols:
+        for symbol in symbols_to_plot:
             # TODO - Volume will displa
             # Extract symbol data
             symbol_data = baseline_multi.loc[:, (symbol, slice(None))]
