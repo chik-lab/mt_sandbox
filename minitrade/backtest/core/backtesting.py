@@ -2854,6 +2854,7 @@ class Backtest:
         plot_allocation=False,
         relative_allocation=True,
         plot_indicator=True,
+        theme=None,
     ):
         """
         Plot the progression of the last backtest run.
@@ -2939,6 +2940,10 @@ class Backtest:
 
         If `plot_indicator` is `True`, the resulting plot will contain
         a section for each indicator used in the strategy.
+
+        If `theme` is provided, it should be a theme name ('light' or 'dark') or None
+        to use the current global theme. The dark theme provides better contrast
+        and readability on dark backgrounds.
         """
         if results is None:
             if self._results is None:
@@ -2954,6 +2959,7 @@ class Backtest:
             data=self._data,
             baseline=self._ohlc_ref_data,
             indicators=indicators,
+            filename=filename,
             plot_width=plot_width,
             plot_equity=plot_equity,
             plot_return=plot_return,
@@ -2970,4 +2976,5 @@ class Backtest:
             plot_allocation=plot_allocation,
             relative_allocation=relative_allocation,
             plot_indicator=plot_indicator,
+            theme=theme,
         )

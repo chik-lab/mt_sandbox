@@ -60,6 +60,23 @@ from bokeh.transform import factor_cmap
 
 from ._util import _as_list, _data_period
 
+# Theme system imports
+try:
+    from .themes import get_current_theme, set_theme
+    from .themes.plotting_integration import (
+        get_themed_colorgen,
+        get_themed_bull_bear_colors,
+        get_themed_factor_cmap,
+        apply_theme_to_new_figure,
+        get_themed_heatmap_palette,
+        get_themed_nan_color,
+        style_legend_with_theme,
+    )
+    THEMES_AVAILABLE = True
+except ImportError:
+    # Fallback if themes not available
+    THEMES_AVAILABLE = False
+
 with open(
     os.path.join(os.path.dirname(__file__), "autoscale_cb.js"), encoding="utf-8"
 ) as _f:
@@ -130,6 +147,43 @@ def _bokeh_reset(filename=None):
         curstate().output_notebook()
 
     return filename
+
+
+def _inject_theme_css(filename):
+    """Inject theme-aware CSS into the HTML file to fix body background."""
+    if not THEMES_AVAILABLE or not filename or not os.path.exists(filename):
+        return
+        
+    theme = get_current_theme()
+    
+    # CSS to apply theme background to HTML body
+    css_style = f"""
+    <style>
+        body {{
+            background-color: {theme.background_fill_color} !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }}
+        .bk-root {{
+            background-color: {theme.background_fill_color} !important;
+        }}
+    </style>
+    """
+    
+    try:
+        # Read the HTML file
+        with open(filename, 'r', encoding='utf-8') as f:
+            html_content = f.read()
+        
+        # Inject the CSS right after the <head> tag
+        if '<head>' in html_content:
+            html_content = html_content.replace('<head>', f'<head>\n{css_style}')
+            
+            # Write back the modified HTML
+            with open(filename, 'w', encoding='utf-8') as f:
+                f.write(html_content)
+    except Exception:
+        pass  # Silently fail if we can't modify the HTML
 
 
 def _get_bokeh_browser_arg(open_browser: bool):
@@ -229,7 +283,10 @@ def _open_html_external(file_path: str) -> None:
 
 
 def colorgen():
-    yield from cycle(Bokeh[8])
+    if THEMES_AVAILABLE:
+        yield from get_themed_colorgen()
+    else:
+        yield from cycle(Bokeh[8])
 
 
 def lightness(color, lightness=0.94):
@@ -469,10 +526,15 @@ def plot(
     plot_allocation=False,
     relative_allocation=True,
     plot_indicator=True,
+    theme=None,
 ):
     """
     Like much of GUI code everywhere, this is a mess.
     """
+    # Set theme if provided
+    if theme is not None and THEMES_AVAILABLE:
+        set_theme(theme)
+    
     # We need to reset global Bokeh state, otherwise subsequent runs of
     # plot() contain some previous run's cruft data (was noticed when
     # TestPlot.test_file_size() test was failing).
@@ -537,7 +599,12 @@ def plot(
     else:
         processed_filename = filename or ""
 
-    COLORS = [BEAR_COLOR, BULL_COLOR]
+    # Get theme-aware colors
+    if THEMES_AVAILABLE:
+        bear_color, bull_color = get_themed_bull_bear_colors()
+        COLORS = [bear_color, bull_color]
+    else:
+        COLORS = [BEAR_COLOR, BULL_COLOR]
     BAR_WIDTH = 0.8
 
     assert baseline.index.equals(results["_equity_curve"].index)
@@ -556,16 +623,37 @@ def plot(
     index = plot_data["index"]
     is_datetime_index = plot_data["is_datetime_index"]
 
-    new_bokeh_figure = partial(
-        _figure,
-        x_axis_type="linear",
-        y_axis_type="linear",
-        width=plot_width,
-        height=400,
-        tools="xpan,xwheel_zoom,box_zoom,undo,redo,reset,save",
-        active_drag="xpan",
-        active_scroll="xwheel_zoom",
-    )
+    def new_bokeh_figure(**kwargs):
+        # Set default parameters
+        defaults = {
+            'x_axis_type': "linear",
+            'y_axis_type': "linear", 
+            'width': plot_width,
+            'height': 400,
+            'tools': "xpan,xwheel_zoom,box_zoom,undo,redo,reset,save",
+            'active_drag': "xpan",
+            'active_scroll': "xwheel_zoom",
+        }
+        
+        # Apply theme defaults if available
+        if THEMES_AVAILABLE:
+            theme = get_current_theme()
+            theme_defaults = {
+                'background_fill_color': theme.background_fill_color,
+                'border_fill_color': theme.border_fill_color,
+            }
+            defaults.update(theme_defaults)
+        
+        # Merge defaults with user kwargs (user takes precedence)
+        final_kwargs = {**defaults, **kwargs}
+        
+        fig = _figure(**final_kwargs)
+        
+        # Apply theme styling
+        if THEMES_AVAILABLE:
+            apply_theme_to_new_figure(fig)
+        
+        return fig
 
     # pad = (index[-1] - index[0]) / 20  # unused
 
@@ -1775,19 +1863,26 @@ return this.labels[index] || "";
         **kwargs,  # type: ignore
     )
 
-    # Wrap in a layout with 5% horizontal padding
+    # Wrap in a layout with theme-aware padding
     from bokeh.layouts import column
 
-    fig = column(
-        main_plot,
-        width_policy="max",
-        margin=(
+    # Apply theme-aware styling to the outer layout
+    layout_kwargs = {
+        'width_policy': "max",
+        'margin': (
             0,
             int(plot_width * 0.05) if plot_width else 60,
             0,
             int(plot_width * 0.05) if plot_width else 60,
         ),  # (top, right, bottom, left) - 5% horizontal padding
-    )
+    }
+    
+    # Apply theme background to layout if available
+    if THEMES_AVAILABLE:
+        theme = get_current_theme()
+        layout_kwargs['background'] = theme.background_fill_color
+
+    fig = column(main_plot, **layout_kwargs)
     # Persist and/or open depending on configuration
     if processed_filename:
         # Set up Bokeh output configuration first
@@ -1802,6 +1897,9 @@ return this.labels[index] || "";
         if dir_path and not os.path.exists(dir_path):
             os.makedirs(dir_path, exist_ok=True)
         save(fig, processed_filename)
+        
+        # Inject theme-aware CSS to fix body background
+        _inject_theme_css(processed_filename)
 
         # Open if requested (avoid Bokeh show double-write)
         if open_browser:
@@ -1847,11 +1945,19 @@ def plot_heatmaps(
         for dims in param_combinations
     ]
     plots = []
+    # Get theme-aware palette and colors
+    if THEMES_AVAILABLE:
+        palette = get_themed_heatmap_palette()
+        nan_color = get_themed_nan_color()
+    else:
+        palette = "Viridis256"
+        nan_color = "white"
+    
     cmap = LinearColorMapper(
-        palette="Viridis256",
+        palette=palette,
         low=min(df.min().min() for df in dfs),
         high=max(df.max().max() for df in dfs),
-        nan_color="white",
+        nan_color=nan_color,
     )
     for df in dfs:
         name1, name2 = df.index.names
@@ -1910,6 +2016,9 @@ def plot_heatmaps(
         if dir_path and not os.path.exists(dir_path):
             os.makedirs(dir_path, exist_ok=True)
         save(fig, processed_filename)
+        
+        # Inject theme-aware CSS to fix body background
+        _inject_theme_css(processed_filename)
 
         # Open if requested (avoid Bokeh show double-write)
         if open_browser:
