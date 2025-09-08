@@ -1684,8 +1684,12 @@ return this.labels[index] || "";
             symbol_source.add(ohlc_low_data, "ohlc_low")
             symbol_source.add(ohlc_high_data, "ohlc_high")
 
-            # Add individual y-axis autoscaling for this symbol chart
-            symbol_js_args = dict(ohlc_range=ohlc_fig.y_range, source=symbol_source)
+            # Add individual y-axis autoscaling for both OHLC and Volume charts
+            symbol_js_args = dict(
+                ohlc_range=ohlc_fig.y_range, 
+                volume_range=volume_fig.y_range,
+                source=symbol_source
+            )
             # Clean autoscaling callback for individual symbol charts
             symbol_autoscale_code = """
             // Enforce strict x-axis limits to prevent zooming out beyond data
@@ -1706,11 +1710,12 @@ return this.labels[index] || "";
                 cb_obj.end = total_bars;
             }
             
-            // Do autoscaling for y-axis
+            // Do autoscaling for both OHLC and Volume y-axes
             let i = Math.max(Math.floor(cb_obj.start), 0);
             let j = Math.min(Math.ceil(cb_obj.end), total_bars);
             
             if (i < j && source.data['ohlc_high'].length > 0) {
+                // OHLC autoscaling
                 let visible_highs = source.data['ohlc_high'].slice(i, j);
                 let visible_lows = source.data['ohlc_low'].slice(i, j);
                 
@@ -1721,6 +1726,18 @@ return this.labels[index] || "";
                     let pad = (max - min) * 0.03;
                     ohlc_range.start = min - pad;
                     ohlc_range.end = max + pad;
+                }
+                
+                // Volume autoscaling
+                if (source.data['Volume'] && source.data['Volume'].length > 0) {
+                    let visible_volumes = source.data['Volume'].slice(i, j);
+                    let volume_max = Math.max.apply(null, visible_volumes);
+                    let volume_min = 0; // Volume always starts from 0
+                    
+                    if (volume_max > 0) {
+                        volume_range.start = volume_min;
+                        volume_range.end = volume_max * 1.05; // 5% padding at top
+                    }
                 }
             }
             """  # noqa: W293
