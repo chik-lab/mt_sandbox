@@ -15,6 +15,7 @@ from bokeh.colors.named import orangered as BEAR_COLOR
 from bokeh.models import (
     BoxAnnotation,
     ColumnDataSource,
+    CrosshairTool,
     CustomJS,
     DatetimeTickFormatter,
     HoverTool,
@@ -150,22 +151,207 @@ def _bokeh_reset(filename=None):
 
 
 def _inject_theme_css(filename):
-    """Inject theme-aware CSS into the HTML file to fix body background."""
-    if not THEMES_AVAILABLE or not filename or not os.path.exists(filename):
+    """Inject theme-aware CSS into the HTML file to fix body background and mobile responsiveness."""
+    if not filename or not os.path.exists(filename):
         return
         
-    theme = get_current_theme()
+    # Get theme colors if available, otherwise use defaults
+    if THEMES_AVAILABLE:
+        theme = get_current_theme()
+        bg_color = theme.background_fill_color
+    else:
+        bg_color = "#ffffff"  # Default white background
     
-    # CSS to apply theme background to HTML body
+    # CSS to apply theme background and mobile responsive text
     css_style = f"""
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body {{
-            background-color: {theme.background_fill_color} !important;
+            background-color: {bg_color} !important;
             margin: 0 !important;
             padding: 0 !important;
         }}
         .bk-root {{
-            background-color: {theme.background_fill_color} !important;
+            background-color: {bg_color} !important;
+        }}
+        
+        /* Base font size scaling for mobile - more aggressive approach */
+        html {{
+            font-size: 16px;
+        }}
+        
+        /* Global font scaling for mobile */
+        @media screen and (max-width: 768px) {{
+            html {{
+                font-size: 18px !important;
+            }}
+            
+            /* Scale all text elements universally */
+            * {{
+                font-size: inherit !important;
+            }}
+            
+            /* Transform-based scaling as fallback */
+            .bk-root {{
+                transform-origin: top left;
+                transform: scale(1.2);
+            }}
+        }}
+        
+        @media screen and (max-width: 480px) {{
+            html {{
+                font-size: 20px !important;
+            }}
+            
+            .bk-root {{
+                transform-origin: top left;
+                transform: scale(1.4);
+            }}
+        }}
+        
+        /* Mobile responsive text scaling - comprehensive Bokeh targeting */
+        @media screen and (max-width: 768px) {{
+            /* Enlarge axis labels and tick labels - multiple selectors for Bokeh versions */
+            .bk-axis-label, 
+            .bk-axis .bk-axis-label,
+            div[data-bk-view] .bk-axis-label,
+            .bk div.bk-axis-label {{
+                font-size: 16px !important;
+            }}
+            
+            .bk-tick-label,
+            .bk-axis .bk-tick-label,
+            div[data-bk-view] .bk-tick-label,
+            .bk div.bk-tick-label,
+            text.bk-axis-label,
+            text.bk-tick-label {{
+                font-size: 14px !important;
+            }}
+            
+            /* Enlarge plot titles - multiple selectors */
+            .bk-title,
+            .bk-plot-layout .bk-title,
+            div[data-bk-view] .bk-title,
+            .bk div.bk-title,
+            .bk-plot-wrapper .bk-title,
+            h1.bk-title {{
+                font-size: 18px !important;
+                font-weight: bold !important;
+            }}
+            
+            /* Enlarge tooltip text */
+            .bk-tooltip,
+            .bk-tooltip-content,
+            div.bk-tooltip,
+            div.bk-tooltip-content {{
+                font-size: 14px !important;
+            }}
+            
+            /* Enlarge legend text */
+            .bk-legend-label,
+            .bk-legend .bk-legend-label,
+            div.bk-legend-label {{
+                font-size: 14px !important;
+            }}
+            
+            /* Make toolbar buttons larger for touch */
+            .bk-toolbar-button,
+            .bk-btn,
+            .bk-toolbar .bk-toolbar-button {{
+                width: 40px !important;
+                height: 40px !important;
+                font-size: 14px !important;
+            }}
+            
+            /* Target all text elements in Bokeh plots - SVG and HTML */
+            .bk-root text,
+            .bk text,
+            div[data-bk-view] text,
+            svg text,
+            .bk-root svg text,
+            .bk svg text {{
+                font-size: 14px !important;
+            }}
+            
+            /* Force font size on canvas-based text (if any) */
+            .bk-canvas-wrapper,
+            .bk-canvas-wrapper * {{
+                font-size: 14px !important;
+            }}
+        }}
+        
+        /* Extra small mobile devices */
+        @media screen and (max-width: 480px) {{
+            .bk-axis-label, 
+            .bk-axis .bk-axis-label,
+            div[data-bk-view] .bk-axis-label,
+            .bk div.bk-axis-label {{
+                font-size: 18px !important;
+            }}
+            
+            .bk-tick-label,
+            .bk-axis .bk-tick-label,
+            div[data-bk-view] .bk-tick-label,
+            .bk div.bk-tick-label,
+            text.bk-axis-label,
+            text.bk-tick-label {{
+                font-size: 16px !important;
+            }}
+            
+            .bk-title,
+            .bk-plot-layout .bk-title,
+            div[data-bk-view] .bk-title,
+            .bk div.bk-title,
+            .bk-plot-wrapper .bk-title,
+            h1.bk-title {{
+                font-size: 20px !important;
+                font-weight: bold !important;
+            }}
+            
+            .bk-tooltip,
+            .bk-tooltip-content,
+            div.bk-tooltip,
+            div.bk-tooltip-content {{
+                font-size: 16px !important;
+            }}
+            
+            .bk-legend-label,
+            .bk-legend .bk-legend-label,
+            div.bk-legend-label {{
+                font-size: 16px !important;
+            }}
+            
+            .bk-toolbar-button,
+            .bk-btn,
+            .bk-toolbar .bk-toolbar-button {{
+                width: 45px !important;
+                height: 45px !important;
+                font-size: 16px !important;
+            }}
+            
+            /* Target all text elements in Bokeh plots - SVG and HTML */
+            .bk-root text,
+            .bk text,
+            div[data-bk-view] text,
+            svg text,
+            .bk-root svg text,
+            .bk svg text {{
+                font-size: 16px !important;
+            }}
+            
+            /* Force font size on canvas-based text (if any) */
+            .bk-canvas-wrapper,
+            .bk-canvas-wrapper * {{
+                font-size: 16px !important;
+            }}
+            
+            /* Ultra-specific targeting for all possible text elements */
+            .bk-root .bk-canvas-wrapper text,
+            .bk-root .bk-plot-wrapper text,
+            .bk-plot-layout text,
+            .bk-plot text {{
+                font-size: 16px !important;
+            }}
         }}
     </style>
     """
@@ -624,12 +810,14 @@ def plot(
     is_datetime_index = plot_data["is_datetime_index"]
 
     def new_bokeh_figure(**kwargs):
-        # Set default parameters
+        # Set default parameters with full width support
         defaults = {
             'x_axis_type': "linear",
             'y_axis_type': "linear", 
+            'y_axis_location': "right",
             'width': plot_width,
             'height': 400,
+            'sizing_mode': 'stretch_width' if plot_width is None else None,  # Full width when no specific width set
             'tools': "xpan,xwheel_zoom,box_zoom,undo,redo,reset,save",
             'active_drag': "xpan",
             'active_scroll': "xwheel_zoom",
@@ -1362,26 +1550,7 @@ return this.labels[index] || "";
     ):
         """Create a single unified dynamic tooltip showing both OHLCV and indicator values"""
 
-        # Build comprehensive tooltip list with date and OHLCV data
-        unified_tooltips = []
-
-        # Add date information (x-axis) to tooltips
-        if "datetime" in symbol_source.data:
-            unified_tooltips.append(("Date", "@datetime{%c}"))
-        else:
-            unified_tooltips.append(("#", "@index"))
-
-        # Add OHLCV data to tooltips
-        unified_tooltips.extend(
-            [
-                ("Open", "@Open{0,0.0[0000]}"),
-                ("High", "@High{0,0.0[0000]}"),
-                ("Low", "@Low{0,0.0[0000]}"),
-                ("Close", "@Close{0,0.0[0000]}"),
-                ("Volume", "@Volume{0,0}"),
-            ]
-        )
-
+        
         # Add indicators to the symbol source and tooltip list
         for i, value in enumerate(indicators):
             # Only plot indicators with plot=True and overlay=True (same logic as before)
@@ -1423,9 +1592,6 @@ return this.labels[index] || "";
             symbol_source.add(reindexed_values, source_name)
 
             # Add to unified tooltip
-            unified_tooltips.append(
-                (indicator_name, f"@{{{source_name}}}{{0,0.0[0000]}}")
-            )
 
             # Get indicator color
             colors = value.attrs.get("color", None)
@@ -1471,17 +1637,67 @@ return this.labels[index] || "";
         for hover_tool in existing_hover_tools:
             symbol_fig.tools.remove(hover_tool)
 
-        # Add our unified hover tool - attach to OHLC renderer only to prevent multiple tooltip boxes
-        renderers_list = [ohlc_renderer] if ohlc_renderer else []
-        unified_hover = HoverTool(
-            tooltips=unified_tooltips,
-            mode="vline",  # Shows vertical line with all values
-            formatters=(
-                {"@datetime": "datetime"} if "datetime" in symbol_source.data else {}
-            ),
-            renderers=renderers_list,  # Attach to specific renderer to prevent multiple tooltips
+
+
+        # Add dynamic title update callback
+        title_callback = CustomJS(args=dict(source=symbol_source, title=symbol_fig.title), code=f"""
+            if (cb_data.index && cb_data.index.indices && cb_data.index.indices.length > 0) {{
+                const i = cb_data.index.indices[0];
+                const data = source.data;
+                
+                // Format OHLC values
+                const open = data['Open'][i] ? data['Open'][i].toFixed(2) : 'N/A';
+                const high = data['High'][i] ? data['High'][i].toFixed(2) : 'N/A';
+                const low = data['Low'][i] ? data['Low'][i].toFixed(2) : 'N/A';
+                const close = data['Close'][i] ? data['Close'][i].toFixed(2) : 'N/A';
+                const volume = data['Volume'][i] ? data['Volume'][i].toLocaleString() : 'N/A';
+                
+                // Format date if available
+                let dateStr = '';
+                if (data['datetime'] && data['datetime'][i]) {{
+                    const date = new Date(data['datetime'][i]);
+                    dateStr = date.toLocaleDateString() + ' ';
+                }}
+                
+                // Format SMA values if available
+                let smaStr = '';
+                for (const key in data) {{
+                    if (key.includes('SMA') && key.includes('10') && data[key][i] !== undefined && data[key][i] !== null) {{
+                        const sma10 = data[key][i].toFixed(2);
+                        if (!smaStr.includes('SMA10=')) {{
+                            smaStr += ` SMA10=${{sma10}}`;
+                        }}
+                    }}
+                    if (key.includes('SMA') && key.includes('20') && data[key][i] !== undefined && data[key][i] !== null) {{
+                        const sma20 = data[key][i].toFixed(2);
+                        if (!smaStr.includes('SMA20=')) {{
+                            smaStr += ` SMA20=${{sma20}}`;
+                        }}
+                    }}
+                    if (key.includes('SMA') && key.includes('50') && data[key][i] !== undefined && data[key][i] !== null) {{
+                        const sma50 = data[key][i].toFixed(2);
+                        if (!smaStr.includes('SMA50=')) {{
+                            smaStr += ` SMA50=${{sma50}}`;
+                        }}
+                    }}
+                }}
+                
+                // Update title with OHLCV and SMA data
+                title.text = `{symbol} OHLC - ${{dateStr}}O=${{open}} H=${{high}} L=${{low}} C=${{close}}${{smaStr}} Volume=${{volume}}`;
+            }} else {{
+                // Reset to default title when not hovering
+                title.text = `{symbol} OHLC`;
+            }}
+        """)
+
+        # Create a minimal hover tool without tooltips - just for triggering the title callback
+        minimal_hover = HoverTool(
+            tooltips=None,  # No tooltips
+            mode="vline",
+            renderers=[ohlc_renderer] if ohlc_renderer else []
         )
-        symbol_fig.add_tools(unified_hover)
+        minimal_hover.callback = title_callback
+        symbol_fig.add_tools(minimal_hover)
 
         # Hide the default legend since we're using the comprehensive tooltip instead
         if symbol_fig.legend:
@@ -1532,13 +1748,23 @@ return this.labels[index] || "";
                 "inc",
             )
 
-            # Create OHLC figure (without volume)
+            # Create OHLC figure with dynamic title
             ohlc_fig = new_bokeh_figure(
                 title=f"{symbol} OHLC",
-                height=400,  # Standard height for OHLC only
+                height=800,  # Standard height for OHLC only
                 x_range=fig_ohlc.x_range,  # Share x-axis with main chart
             )
-
+            
+            # Add crosshair tool to individual OHLC chart
+            ohlc_crosshair = CrosshairTool(
+                dimensions="both",  # Show both x and y crosshairs
+                line_color="#758696",  # Custom gray-blue color for individual charts
+                line_alpha=0.7,
+                line_width=1.5,
+            )
+            ohlc_fig.add_tools(ohlc_crosshair)
+            # Don't override active_inspect - let both CrosshairTool and HoverTool be active
+            
             # Apply datetime formatting to x-axis (same as main chart)
             if is_datetime_index:
                 ohlc_fig.xaxis.formatter = CustomJSTickFormatter(
@@ -1571,7 +1797,7 @@ return this.labels[index] || "";
                 fill_color=factor_cmap("inc", COLORS, ["0", "1"]),
             )
 
-            # No static legend needed - all OHLCV and indicator values are shown dynamically in tooltips
+            # Dynamic title will be added later with the unified legend
 
             # Create separate Volume figure
             volume_fig = new_bokeh_figure(
@@ -1580,6 +1806,16 @@ return this.labels[index] || "";
                 x_range=ohlc_fig.x_range,  # Share x-axis with OHLC chart
                 y_axis_label="Volume",
             )
+            
+            # Add crosshair tool to individual Volume chart
+            volume_crosshair = CrosshairTool(
+                dimensions="both",  # Show both x and y crosshairs
+                line_color="cyan",  # Different color for volume charts
+                line_alpha=0.6,
+                line_width=1,
+            )
+            volume_fig.add_tools(volume_crosshair)
+            # Don't override active_inspect - let both CrosshairTool and HoverTool be active
             
             # Apply datetime formatting to volume chart x-axis
             if is_datetime_index:
@@ -1607,8 +1843,65 @@ return this.labels[index] || "";
                 alpha=0.7,
             )
             
-            # Add volume tooltips
-            set_tooltips(volume_fig, [("Volume", "@Volume{0,0}")], renderers=[volume_bars])
+            # Add dynamic title callback for volume chart without tooltips
+            volume_title_callback = CustomJS(args=dict(source=symbol_source, title=volume_fig.title), code=f"""
+                if (cb_data.index && cb_data.index.indices && cb_data.index.indices.length > 0) {{
+                    const i = cb_data.index.indices[0];
+                    const data = source.data;
+                    
+                    // Format OHLC values
+                    const open = data['Open'][i] ? data['Open'][i].toFixed(2) : 'N/A';
+                    const high = data['High'][i] ? data['High'][i].toFixed(2) : 'N/A';
+                    const low = data['Low'][i] ? data['Low'][i].toFixed(2) : 'N/A';
+                    const close = data['Close'][i] ? data['Close'][i].toFixed(2) : 'N/A';
+                    const volume = data['Volume'][i] ? data['Volume'][i].toLocaleString() : 'N/A';
+                    
+                    // Format SMA values if available
+                    let smaStr = '';
+                    for (const key in data) {{
+                        if (key.includes('SMA') && key.includes('10') && data[key][i] !== undefined && data[key][i] !== null) {{
+                            const sma10 = data[key][i].toFixed(2);
+                            if (!smaStr.includes('SMA10=')) {{
+                                smaStr += ` SMA10=${{sma10}}`;
+                            }}
+                        }}
+                        if (key.includes('SMA') && key.includes('20') && data[key][i] !== undefined && data[key][i] !== null) {{
+                            const sma20 = data[key][i].toFixed(2);
+                            if (!smaStr.includes('SMA20=')) {{
+                                smaStr += ` SMA20=${{sma20}}`;
+                            }}
+                        }}
+                        if (key.includes('SMA') && key.includes('50') && data[key][i] !== undefined && data[key][i] !== null) {{
+                            const sma50 = data[key][i].toFixed(2);
+                            if (!smaStr.includes('SMA50=')) {{
+                                smaStr += ` SMA50=${{sma50}}`;
+                            }}
+                        }}
+                    }}
+                    
+                    // Format date if available
+                    let dateStr = '';
+                    if (data['datetime'] && data['datetime'][i]) {{
+                        const date = new Date(data['datetime'][i]);
+                        dateStr = date.toLocaleDateString() + ' ';
+                    }}
+                    
+                    // Update title with OHLCV, SMA and volume data
+                    title.text = `{symbol} Volume=${{volume}}`;
+                }} else {{
+                    // Reset to default title when not hovering
+                    title.text = `{symbol} Volume`;
+                }}
+            """)
+            
+            # Create minimal hover tool without tooltips for volume chart
+            volume_hover = HoverTool(
+                tooltips=None,  # No tooltips
+                renderers=[volume_bars],
+                mode="vline"
+            )
+            volume_hover.callback = volume_title_callback
+            volume_fig.add_tools(volume_hover)
             volume_fig.yaxis.formatter = NumeralTickFormatter(format="0 a")
 
             # Add white vertical lines at the beginning of each month (per-symbol volume)
@@ -1631,7 +1924,7 @@ return this.labels[index] || "";
                 # Add white vertical lines at month start positions (left edge of bars)
                 for month_pos in month_starts:
                     span = Span(
-                        location=month_pos - BAR_WIDTH/2,
+                        location=month_pos - BAR_WIDTH/2 - 0.1,
                         dimension='height',
                         line_color='white',
                         line_width=2,
@@ -1824,9 +2117,15 @@ return this.labels[index] || "";
             ohlc_fig.x_range.js_on_change("start", symbol_autoscale_cb)
             ohlc_fig.x_range.js_on_change("end", symbol_autoscale_cb)
 
-            # Add both OHLC and Volume figures for this symbol
-            symbol_figs.append(ohlc_fig)
-            symbol_figs.append(volume_fig)
+            # Combine OHLC and Volume figures with minimal spacing
+            from bokeh.layouts import column
+            combined_symbol_fig = column(
+                ohlc_fig, 
+                volume_fig, 
+                spacing=0,  # Remove spacing between OHLC and volume
+                sizing_mode="stretch_width"
+            )
+            symbol_figs.append(combined_symbol_fig)
 
         return symbol_figs
 
@@ -1936,9 +2235,10 @@ return this.labels[index] || "";
 
     plots = figs_above_ohlc + [fig_ohlc] + figs_below_ohlc
 
-    kwargs = {}
-    if plot_width is None:
-        kwargs["sizing_mode"] = "stretch_width"
+    # Always use full width with minimal padding
+    kwargs = {
+        "sizing_mode": "stretch_width",  # Always stretch to full width
+    }
 
     # Create the main gridplot
     main_plot = gridplot(
@@ -1949,18 +2249,14 @@ return this.labels[index] || "";
         **kwargs,  # type: ignore
     )
 
-    # Wrap in a layout with theme-aware padding
+    # Wrap in a layout with minimal padding for full width
     from bokeh.layouts import column
 
-    # Apply theme-aware styling to the outer layout
+    # Apply minimal margins for full width display
     layout_kwargs = {
-        'width_policy': "max",
-        'margin': (
-            0,
-            int(plot_width * 0.05) if plot_width else 60,
-            0,
-            int(plot_width * 0.05) if plot_width else 60,
-        ),  # (top, right, bottom, left) - 5% horizontal padding
+        'width_policy': "max",  
+        'sizing_mode': "stretch_width",  # Ensure full width
+        'margin': (0, 5, 0, 5),  # Minimal 5px padding on sides only
     }
     
     # Apply theme background to layout if available
