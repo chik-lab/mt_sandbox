@@ -21,7 +21,7 @@ def get_themed_bull_bear_colors() -> Tuple[str, str]:
     """Get bull/bear colors for the current theme."""
     theme = get_current_theme()
     config = theme.get_config_dict()
-    return config.get('bear_color', '#FF4500'), config.get('bull_color', '#228B22')
+    return config.get('bear_color', '#FF4500'), config.get('bull_color')
 
 
 def get_themed_factor_cmap(field_name: str, factors: List[str], colors: List[str] = None):

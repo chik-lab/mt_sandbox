@@ -683,13 +683,18 @@ def plot(
     trades_cmap = factor_cmap("returns_positive", colors_darker, ["0", "1"])
 
     if is_datetime_index:
+        # LEVERAGE BOKEH'S DYNAMIC CAPABILITIES: Let Bokeh handle tick selection automatically
+        # Use intelligent formatting that adapts to zoom level
+        
+        # Simplify to get the graph working first, then add complexity
         fig_ohlc.xaxis.formatter = CustomJSTickFormatter(
             args=dict(
                 axis=fig_ohlc.xaxis[0],
-                formatter=DatetimeTickFormatter(days="%a, %d %b", months="%m/%Y"),
+                formatter=DatetimeTickFormatter(days="%d %b", months="%b %Y", years="%Y"),
                 source=source,
             ),
             code="""
+// Simple, robust formatter - just map ticks to datetime values
 this.labels = this.labels || formatter.doFormat(ticks
                                                 .map(i => source.data.datetime[i])
                                                 .filter(t => t !== undefined));
@@ -708,6 +713,12 @@ return this.labels[index] || "";
             active_drag="xpan",
             **kwargs,
         )
+        
+        # Apply same ticker and formatter as main chart for consistency
+        if is_datetime_index:
+            fig.xaxis.ticker = fig_ohlc.xaxis.ticker  # Use same custom ticker
+            fig.xaxis.formatter = fig_ohlc.xaxis[0].formatter  # Use same formatter
+        
         fig.xaxis.visible = False
         fig.yaxis.minor_tick_line_color = None
         fig.add_layout(Legend(), "center")
@@ -993,12 +1004,47 @@ return this.labels[index] || "";
     def _plot_volume_section():
         """Volume section"""
         fig = new_bokeh_figure(y_axis_label="Volume")
+        
+        # Apply same ticker as main chart for consistency
+        if is_datetime_index:
+            fig.xaxis.ticker = fig_ohlc.xaxis.ticker  # Use same ticker as main chart
+        
         fig.xaxis.formatter = fig_ohlc.xaxis[0].formatter
         fig.xaxis.visible = True
         fig_ohlc.xaxis.visible = False  # Show only Volume's xaxis
         r = fig.vbar("index", BAR_WIDTH, "Volume", source=source, color=inc_cmap)
         set_tooltips(fig, [("Volume", "@Volume{0.00 a}")], renderers=[r])
         fig.yaxis.formatter = NumeralTickFormatter(format="0 a")
+        
+        # Add white vertical lines at the beginning of each month
+        if is_datetime_index:
+            from bokeh.models import Span
+            import pandas as pd
+            
+            # Access datetime data through the source object
+            datetime_values = source.data['datetime']
+            month_starts = []
+            seen_months = set()
+            
+            # Find month start positions
+            for idx, dt_timestamp in enumerate(datetime_values):
+                dt = pd.Timestamp(dt_timestamp)
+                month_key = (dt.year, dt.month)
+                if month_key not in seen_months:
+                    month_starts.append(idx)
+                    seen_months.add(month_key)
+            
+            # Add white vertical lines at month start positions (left edge of bars)
+            for month_pos in month_starts:
+                span = Span(
+                    location=month_pos - BAR_WIDTH/2,
+                    dimension='height',
+                    line_color='white',
+                    line_width=2,
+                    line_alpha=0.8
+                )
+                fig.add_layout(span)
+        
         return fig
 
     def _plot_superimposed_ohlc():
@@ -1498,12 +1544,11 @@ return this.labels[index] || "";
                 ohlc_fig.xaxis.formatter = CustomJSTickFormatter(
                     args=dict(
                         axis=ohlc_fig.xaxis[0],
-                        formatter=DatetimeTickFormatter(
-                            days="%a, %d %b", months="%m/%Y"
-                        ),
+                        formatter=DatetimeTickFormatter(days="%d %b", months="%b %Y", years="%Y"),
                         source=symbol_source,
                     ),
                     code="""
+// Simple, robust formatter - just map ticks to datetime values
 this.labels = this.labels || formatter.doFormat(ticks
                                                 .map(i => source.data.datetime[i])
                                                 .filter(t => t !== undefined));
@@ -1538,6 +1583,8 @@ return this.labels[index] || "";
             
             # Apply datetime formatting to volume chart x-axis
             if is_datetime_index:
+                # Apply same ticker and formatter as OHLC chart
+                volume_fig.xaxis.ticker = ohlc_fig.xaxis.ticker
                 volume_fig.xaxis.formatter = ohlc_fig.xaxis[0].formatter
             
             # Hide OHLC x-axis, show only volume x-axis
@@ -1563,6 +1610,34 @@ return this.labels[index] || "";
             # Add volume tooltips
             set_tooltips(volume_fig, [("Volume", "@Volume{0,0}")], renderers=[volume_bars])
             volume_fig.yaxis.formatter = NumeralTickFormatter(format="0 a")
+
+            # Add white vertical lines at the beginning of each month (per-symbol volume)
+            if is_datetime_index:
+                from bokeh.models import Span
+                import pandas as pd
+                
+                # Use the symbol-specific source for date detection
+                datetime_values = symbol_source.data.get('datetime', [])
+                month_starts = []
+                seen_months = set()
+                
+                for idx, dt_timestamp in enumerate(datetime_values):
+                    dt = pd.Timestamp(dt_timestamp)
+                    month_key = (dt.year, dt.month)
+                    if month_key not in seen_months:
+                        month_starts.append(idx)
+                        seen_months.add(month_key)
+                
+                # Add white vertical lines at month start positions (left edge of bars)
+                for month_pos in month_starts:
+                    span = Span(
+                        location=month_pos - BAR_WIDTH/2,
+                        dimension='height',
+                        line_color='white',
+                        line_width=2,
+                        line_alpha=0.8
+                    )
+                    volume_fig.add_layout(span)
 
             # Filter trades for this specific symbol (used for both trade markers and phase highlights)
             symbol_trades = pd.DataFrame()  # Default empty DataFrame
