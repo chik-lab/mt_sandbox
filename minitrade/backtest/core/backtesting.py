@@ -226,7 +226,7 @@ class Allocation:
                     else list(item)
                 )
                 for x in item:
-                    candidates[x] = candidates.get(x, 0) + 1
+                    candidates[x] = candidates.get(x) + 1
             candidates = [
                 x for x in candidates if candidates[x] == len(list_and_conditions)
             ]
@@ -273,9 +273,9 @@ class Allocation:
                     else list(item)
                 )
                 for x in item:
-                    candidates[x] = candidates.get(x, 0) + 1
+                    candidates[x] = candidates.get(x) + 1
             self._tickers = [
-                x for x in self._tickers if candidates.get(x, 0) < len(conditions)
+                x for x in self._tickers if candidates.get(x) < len(conditions)
             ]
             return self
 

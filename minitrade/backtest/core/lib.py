@@ -217,9 +217,9 @@ def compute_stats(
 
 def _get_default_agg(series):
     """Get default aggregation function for series."""
-    agg = OHLCV_AGG.get(getattr(series, "name", ""), "last")
+    agg = OHLCV_AGG.get(getattr(series), "last")
     if isinstance(series, pd.DataFrame):
-        agg = {column: OHLCV_AGG.get(column, "last") for column in series.columns}
+        agg = {column: OHLCV_AGG.get(column) for column in series.columns}
     return agg
 
 
@@ -230,7 +230,7 @@ def _get_strategy_wrapper():
     while frame and level <= 3:
         frame = frame.f_back
         level += 1
-        if isinstance(frame.f_locals.get("self"), Strategy):  # type: ignore
+        if isinstance(frame.f_locals.get("self")):  # type: ignore
             strategy_I = frame.f_locals["self"].I  # type: ignore
             break
 

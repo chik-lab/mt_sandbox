@@ -440,7 +440,7 @@ def install_ibgateway(minitrade_root):
         click.secho("Installing Interactive Brokers gateway...")
         ib_loc = os.path.join(minitrade_root, "ibgateway")
         url = "https://download2.interactivebrokers.com/portal/clientportal.gw.zip"
-        response = requests.get(url, stream=True)
+        response = requests.get(url)
         total_kb = int(int(response.headers["Content-Length"]) / 1000)
         with open(f"{ib_loc}/clientportal.gw.zip", "wb") as f:
             file_hash = hashlib.md5()

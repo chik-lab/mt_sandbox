@@ -46,7 +46,7 @@ def get_series(series_id):
 def search_series(q):
     url = f"https://api.stlouisfed.org/fred/series/search?api_key={api_key}&file_type=json"
     df = pd.DataFrame(
-        requests.get(url, params={"search_text": q, "order_by": "popularity"}).json()[
+        requests.get(url).json()[
             "seriess"
         ]
     )

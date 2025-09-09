@@ -162,7 +162,7 @@ def plot_heatmap(heatmap: pd.DataFrame, smooth: int | None = None):
     for i in range(0, len(heatmap), 50):
         pg = heatmap.iloc[i : i + 50]
         _, ax = plt.subplots(figsize=(pg.shape[1] // 4 + 1, pg.shape[0] // 4 + 1))
-        ax.set_title(f'{heatmap.attrs.get("goal", "")} (rank {i} - {i + len(pg)})')
+        ax.set_title(f'{heatmap.attrs.get("goal")} (rank {i} - {i + len(pg)})')
         ax.grid(False)
         sns.heatmap(pg, cmap="viridis")
         plt.savefig(f"performance_{i}-{i+len(pg)}.png", bbox_inches="tight")

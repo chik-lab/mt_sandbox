@@ -87,7 +87,7 @@ def show_schedule_editor(tab, plan: TaskPlan):
             ["N", "E", "A"],
             format_func=lambda _: {"N": "None", "E": "Error only", "A": "Always"}[_],
             index="NEA".index(
-                plan.notification.get("telegram", "N") if plan.notification else "N"
+                plan.notification.get("telegram") if plan.notification else "N"
             ),
         ),
         "email": tab.selectbox(
@@ -95,7 +95,7 @@ def show_schedule_editor(tab, plan: TaskPlan):
             ["N", "E", "A"],
             format_func=lambda _: {"N": "None", "E": "Error only", "A": "Always"}[_],
             index="NEA".index(
-                plan.notification.get("email", "N") if plan.notification else "N"
+                plan.notification.get("email") if plan.notification else "N"
             ),
         ),
     }

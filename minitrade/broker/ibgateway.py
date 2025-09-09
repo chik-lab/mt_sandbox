@@ -254,7 +254,7 @@ def get_account(alias: str) -> BrokerAccount:
         raise HTTPException(404, f"Account {alias} not found")
 
 
-@app.get("/ibgateway", response_model=list[GatewayStatus])
+@app.get("/ibgateway")
 def get_gateway_status():
     """Return the gateway status"""
     status = []
@@ -266,7 +266,7 @@ def get_gateway_status():
     return status
 
 
-@app.get("/ibgateway/{alias}", response_model=GatewayStatus)
+@app.get("/ibgateway/{alias}")
 def get_account_status(account=Depends(get_account)):
     """Return the current gateway status associated with account `alias`
 
@@ -284,7 +284,7 @@ def get_account_status(account=Depends(get_account)):
             timestamp: Timestamp of status check
         or 204 if no gateway running.
     """
-    instance = app.state.registry.get(account.username, None)
+    instance = app.state.registry.get(account.username)
     if instance:
         return ping_ibgateway(account.username, instance)
     else:
@@ -301,7 +301,7 @@ def exit_gateway(account=Depends(get_account)):
     Returns:
         204
     """
-    instance = app.state.registry.get(account.username, None)
+    instance = app.state.registry.get(account.username)
     if instance:
         kill_ibgateway(account.username, instance)
     return Response(status_code=204)

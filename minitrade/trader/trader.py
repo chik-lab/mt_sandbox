@@ -1277,7 +1277,7 @@ class TaskManager:
                     config = json.loads(line[17:])
                     timezone = config.get("timezone")
                     schedule = config.get("schedule")
-                    enabled = config.get("enabled", False)
+                    enabled = config.get("enabled")
                     notification = config.get("notification")
                     plan = TaskPlan(
                         id=MTDB.uniqueid(),
@@ -1369,12 +1369,12 @@ class TaskRunner:
     def _send_task_notification(self, log: TaskLog):
         """Send task result via telegram and/or email"""
         telegram = (
-            self.plan.notification.get("telegram", "N")
+            self.plan.notification.get("telegram")
             if self.plan.notification
             else "N"
         )
         email = (
-            self.plan.notification.get("email", "N") if self.plan.notification else "N"
+            self.plan.notification.get("email") if self.plan.notification else "N"
         )
         subject = f'Task "{self.plan.name}" {"❌" if log.error else "✅"}  @ {log.log_time.strftime("%Y-%m-%d %H:%M:%S")}'
         message = [f"<b>{subject}</b>\n<pre></pre>"]

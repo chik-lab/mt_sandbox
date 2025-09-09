@@ -44,7 +44,7 @@ def display_process_status():
     }
     proc_map = {"scheduler": [], "ib": [], "web": []}
     for k, v in pid_map.items():
-        proc_map[v] = proc_map.get(v, []) + [k]
+        proc_map[v] = proc_map.get(v) + [k]
     ppid_map = {
         pid: ppid
         for pid, ppid, _, _, _, *_ in [line.split() for line in output.splitlines()]

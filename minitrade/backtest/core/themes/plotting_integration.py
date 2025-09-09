@@ -21,7 +21,7 @@ def get_themed_bull_bear_colors() -> Tuple[str, str]:
     """Get bull/bear colors for the current theme."""
     theme = get_current_theme()
     config = theme.get_config_dict()
-    return config.get('bear_color', '#FF4500'), config.get('bull_color')
+    return config.get('bear_color'), config.get('bull_color')
 
 
 def get_themed_factor_cmap(field_name: str, factors: List[str], colors: List[str] = None):
@@ -56,7 +56,7 @@ def get_themed_heatmap_palette() -> str:
     """Get heatmap color palette for current theme."""
     theme = get_current_theme()
     config = theme.get_config_dict()
-    return config.get('heatmap_palette', 'Viridis256')
+    return config.get('heatmap_palette')
 
 
 def get_themed_alpha_values() -> dict:
@@ -64,8 +64,8 @@ def get_themed_alpha_values() -> dict:
     theme = get_current_theme()
     config = theme.get_config_dict()
     return {
-        'volume_alpha': config.get('volume_alpha', 0.5),
-        'trade_line_alpha': config.get('trade_line_alpha', 0.8),
+        'volume_alpha': config.get('volume_alpha'),
+        'trade_line_alpha': config.get('trade_line_alpha'),
     }
 
 

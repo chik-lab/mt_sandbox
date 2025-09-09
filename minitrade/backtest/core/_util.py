@@ -19,7 +19,7 @@ def _as_str(value) -> str:
     if isinstance(value, (Number, str)):
         return str(value)
     if isinstance(value, pd.DataFrame):
-        return value.attrs.get("name", None) or "df"
+        return value.attrs.get("name") or "df"
     name = str(getattr(value, "name", "") or "")
     if name in ("Open", "High", "Low", "Close", "Volume"):
         return name[:1]

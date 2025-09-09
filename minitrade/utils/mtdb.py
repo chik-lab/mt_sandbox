@@ -183,7 +183,7 @@ class MTDB:
         for obj in objects:
             data = obj if isinstance(obj, dict) else asdict(obj)
             if whitelist:
-                whitelisted = {k: data.get(k, None) for k in whitelist}
+                whitelisted = {k: data.get(k) for k in whitelist}
                 diff = set(data.keys()) - set(whitelisted.keys())
                 if diff:
                     logger.warning(

@@ -180,32 +180,32 @@ def _inject_theme_css(filename):
             font-size: 16px;
         }}
         
-        /* Global font scaling for mobile */
+        /* Mobile viewport and touch optimization */
         @media screen and (max-width: 768px) {{
-            html {{
-                font-size: 18px !important;
+            body {{
+                overflow-x: auto !important;
+                overflow-y: auto !important;
+                -webkit-overflow-scrolling: touch !important;
+                touch-action: pan-x pan-y !important;
             }}
             
-            /* Scale all text elements universally */
-            * {{
-                font-size: inherit !important;
-            }}
-            
-            /* Transform-based scaling as fallback */
             .bk-root {{
-                transform-origin: top left;
-                transform: scale(1.2);
+                overflow: visible !important;
+                touch-action: pan-x pan-y !important;
+            }}
+            
+            /* Ensure scrollable content */
+            .bk-canvas-wrapper {{
+                touch-action: pan-x pan-y !important;
             }}
         }}
         
         @media screen and (max-width: 480px) {{
-            html {{
-                font-size: 20px !important;
-            }}
-            
-            .bk-root {{
-                transform-origin: top left;
-                transform: scale(1.4);
+            body {{
+                overflow-x: auto !important;
+                overflow-y: auto !important;
+                -webkit-overflow-scrolling: touch !important;
+                touch-action: pan-x pan-y !important;
             }}
         }}
         
@@ -273,10 +273,11 @@ def _inject_theme_css(filename):
                 font-size: 14px !important;
             }}
             
-            /* Force font size on canvas-based text (if any) */
-            .bk-canvas-wrapper,
-            .bk-canvas-wrapper * {{
-                font-size: 14px !important;
+            /* Ensure proper touch scrolling */
+            .bk-plot-wrapper,
+            .bk-canvas-wrapper {{
+                touch-action: pan-x pan-y !important;
+                overflow: visible !important;
             }}
         }}
         
@@ -339,18 +340,20 @@ def _inject_theme_css(filename):
                 font-size: 16px !important;
             }}
             
-            /* Force font size on canvas-based text (if any) */
-            .bk-canvas-wrapper,
-            .bk-canvas-wrapper * {{
-                font-size: 16px !important;
+            /* Ensure proper touch scrolling for small devices */
+            .bk-plot-wrapper,
+            .bk-canvas-wrapper {{
+                touch-action: pan-x pan-y !important;
+                overflow: visible !important;
             }}
             
-            /* Ultra-specific targeting for all possible text elements */
+            /* Prevent touch conflicts */
             .bk-root .bk-canvas-wrapper text,
             .bk-root .bk-plot-wrapper text,
             .bk-plot-layout text,
             .bk-plot text {{
                 font-size: 16px !important;
+                pointer-events: none !important;
             }}
         }}
     </style>
@@ -633,7 +636,7 @@ def _process_baseline_data(baseline):
             single["Volume"] = 0
         single = single[list(OHLCV_AGG.keys())].copy(deep=False)
         # Wrap into a MultiIndex with a synthetic ticker name
-        ticker_name = getattr(single, "attrs", {}).get("symbol", None) or "Asset"
+        ticker_name = getattr(single, "attrs", {}).get("symbol") or "Asset"
         baseline_multi = pd.concat({ticker_name: single}, axis=1)
         # For main chart, keep simplified single-symbol columns
         baseline_main = single
@@ -646,7 +649,7 @@ def _prepare_plot_data(results, data, baseline, indicators, resample):
     trades = results["_trades"]
 
     # Extract phase data if available
-    phase_data = results.get("_phase_data", {})
+    phase_data = results.get("_phase_data")
 
     # Extract traded tickers
     traded_tickers = _extract_traded_tickers(trades)
@@ -1204,6 +1207,35 @@ return this.labels[index] || "";
         set_tooltips(fig, [("Volume", "@Volume{0.00 a}")], renderers=[r])
         fig.yaxis.formatter = NumeralTickFormatter(format="0 a")
         
+        # Add phase highlighting if available
+        if hasattr(bt._strategy, 'phase_manager') and hasattr(bt._strategy.phase_manager, 'phase_completion_points'):
+            try:
+                from algo.utils.plotting.phase import calculate_phase_ranges_from_completion_points, render_phase_highlights_with_data
+                
+                # Get the first ticker for phase data (assuming main chart shows first ticker)
+                if tickers_to_plot and len(tickers_to_plot) > 0:
+                    ticker = tickers_to_plot[0]
+                    
+                    # Calculate phase ranges
+                    phase_data = {'completion_points': bt._strategy.phase_manager.phase_completion_points}
+                    symbol_data = bt._strategy.data  # Assuming this has the price data
+                    symbol_trades = pd.DataFrame()  # Empty trades for now
+                    
+                    phase_ranges = calculate_phase_ranges_from_completion_points(
+                        phase_data['completion_points'], ticker, symbol_data, symbol_trades
+                    )
+                    
+                    # Get volume data range for proper scaling
+                    volume_data = source.data['Volume']
+                    volume_max = max(volume_data) if volume_data else 1
+                    volume_range = volume_max
+                    
+                    # Apply phase highlights to main volume chart
+                    render_phase_highlights_with_data(fig, phase_ranges, volume_max, volume_range)
+            except (ImportError, AttributeError, KeyError):
+                # Skip phase highlighting if not available
+                pass
+        
         # Add white vertical lines at the beginning of each month
         if is_datetime_index:
             from bokeh.models import Span
@@ -1561,13 +1593,13 @@ return this.labels[index] || "";
             if not is_overlay:
                 continue
 
-            is_scatter = value.attrs.get("scatter", False)
+            is_scatter = value.attrs.get("scatter")
 
             # Handle indicators for this specific symbol
             if isinstance(value, pd.DataFrame):
                 if symbol in value.columns:
                     symbol_indicator = value[symbol]
-                    indicator_name = value.attrs.get("name", symbol)
+                    indicator_name = value.attrs.get("name")
                 else:
                     continue
             else:
@@ -1594,7 +1626,7 @@ return this.labels[index] || "";
             # Add to unified tooltip
 
             # Get indicator color
-            colors = value.attrs.get("color", None)
+            colors = value.attrs.get("color")
             if colors:
                 color = colors if isinstance(colors, str) else colors[0]
             else:
@@ -1910,7 +1942,7 @@ return this.labels[index] || "";
                 import pandas as pd
                 
                 # Use the symbol-specific source for date detection
-                datetime_values = symbol_source.data.get('datetime', [])
+                datetime_values = symbol_source.data.get('datetime')
                 month_starts = []
                 seen_months = set()
                 
@@ -2024,6 +2056,15 @@ return this.labels[index] || "";
                 
                 # Render phase highlights using the new function
                 render_phase_highlights_with_data(ohlc_fig, phase_ranges, price_max, price_range)
+                
+                # Also add phase highlighting to volume chart
+                if 'volume_fig' in locals():
+                    # Calculate volume range for phase highlighting
+                    volume_max = symbol_data["Volume"].max()
+                    volume_range = volume_max
+                    
+                    # Render phase highlights on volume chart
+                    render_phase_highlights_with_data(volume_fig, phase_ranges, volume_max, volume_range)
 
             # Plot wedge trend lines if available
             if hasattr(results.get('_strategy'), 'higher_lows_wedge'):

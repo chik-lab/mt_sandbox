@@ -76,12 +76,12 @@ def get_color_palette(theme_type: str) -> List[str]:
 
 def get_bull_bear_colors(theme_type: str) -> dict:
     """Get bull/bear colors for specified theme type."""
-    return BULL_BEAR_COLORS.get(theme_type.lower(), BULL_BEAR_COLORS['light'])
+    return BULL_BEAR_COLORS.get(theme_type.lower())
 
 
 def get_neutral_colors(theme_type: str) -> dict:
     """Get neutral colors for specified theme type."""
-    return NEUTRAL_COLORS.get(theme_type.lower(), NEUTRAL_COLORS['light'])
+    return NEUTRAL_COLORS.get(theme_type.lower())
 
 
 def lighten_color(color: str, factor: float = 0.2) -> str:
