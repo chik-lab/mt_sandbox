@@ -2067,10 +2067,10 @@ return this.labels[index] || "";
                     render_phase_highlights_with_data(volume_fig, phase_ranges, volume_max, volume_range)
 
             # Plot wedge trend lines if available
-            if hasattr(results.get('_strategy'), 'higher_lows_wedge'):
+            if hasattr(results.get('_strategy'), 'higher_lows_wedge_data'):
                 from algo.utils.plotting.phase import plot_wedge_trend_lines
                 strategy_obj = results['_strategy']
-                wedge_data = strategy_obj.higher_lows_wedge.df
+                wedge_data = strategy_obj.higher_lows_wedge_data.df
                 
                 # Pass all required data instead of strategy object
                 plot_wedge_trend_lines(
