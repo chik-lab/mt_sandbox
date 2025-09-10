@@ -151,7 +151,7 @@ def _bokeh_reset(filename=None):
 
 
 def _inject_theme_css(filename):
-    """Inject theme-aware CSS into the HTML file to fix body background and mobile responsiveness."""
+    """Inject theme-aware CSS into the HTML file to fix body background (no mobile responsiveness)."""
     if not filename or not os.path.exists(filename):
         return
         
@@ -162,9 +162,8 @@ def _inject_theme_css(filename):
     else:
         bg_color = "#ffffff"  # Default white background
     
-    # CSS to apply theme background and mobile responsive text
+    # CSS to apply theme background only (no mobile-specific behavior)
     css_style = f"""
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body {{
             background-color: {bg_color} !important;
@@ -174,205 +173,24 @@ def _inject_theme_css(filename):
         .bk-root {{
             background-color: {bg_color} !important;
         }}
-        
-        /* Base font size scaling for mobile - more aggressive approach */
-        html {{
-            font-size: 16px;
-        }}
-        
-        /* Mobile viewport and touch optimization */
-        @media screen and (max-width: 768px) {{
-            body {{
-                overflow-x: auto !important;
-                overflow-y: auto !important;
-                -webkit-overflow-scrolling: touch !important;
-                touch-action: pan-x pan-y !important;
-            }}
-            
-            .bk-root {{
-                overflow: visible !important;
-                touch-action: pan-x pan-y !important;
-            }}
-            
-            /* Ensure scrollable content */
-            .bk-canvas-wrapper {{
-                touch-action: pan-x pan-y !important;
-            }}
-        }}
-        
-        @media screen and (max-width: 480px) {{
-            body {{
-                overflow-x: auto !important;
-                overflow-y: auto !important;
-                -webkit-overflow-scrolling: touch !important;
-                touch-action: pan-x pan-y !important;
-            }}
-        }}
-        
-        /* Mobile responsive text scaling - comprehensive Bokeh targeting */
-        @media screen and (max-width: 768px) {{
-            /* Enlarge axis labels and tick labels - multiple selectors for Bokeh versions */
-            .bk-axis-label, 
-            .bk-axis .bk-axis-label,
-            div[data-bk-view] .bk-axis-label,
-            .bk div.bk-axis-label {{
-                font-size: 16px !important;
-            }}
-            
-            .bk-tick-label,
-            .bk-axis .bk-tick-label,
-            div[data-bk-view] .bk-tick-label,
-            .bk div.bk-tick-label,
-            text.bk-axis-label,
-            text.bk-tick-label {{
-                font-size: 14px !important;
-            }}
-            
-            /* Enlarge plot titles - multiple selectors */
-            .bk-title,
-            .bk-plot-layout .bk-title,
-            div[data-bk-view] .bk-title,
-            .bk div.bk-title,
-            .bk-plot-wrapper .bk-title,
-            h1.bk-title {{
-                font-size: 18px !important;
-                font-weight: bold !important;
-            }}
-            
-            /* Enlarge tooltip text */
-            .bk-tooltip,
-            .bk-tooltip-content,
-            div.bk-tooltip,
-            div.bk-tooltip-content {{
-                font-size: 14px !important;
-            }}
-            
-            /* Enlarge legend text */
-            .bk-legend-label,
-            .bk-legend .bk-legend-label,
-            div.bk-legend-label {{
-                font-size: 14px !important;
-            }}
-            
-            /* Make toolbar buttons larger for touch */
-            .bk-toolbar-button,
-            .bk-btn,
-            .bk-toolbar .bk-toolbar-button {{
-                width: 40px !important;
-                height: 40px !important;
-                font-size: 14px !important;
-            }}
-            
-            /* Target all text elements in Bokeh plots - SVG and HTML */
-            .bk-root text,
-            .bk text,
-            div[data-bk-view] text,
-            svg text,
-            .bk-root svg text,
-            .bk svg text {{
-                font-size: 14px !important;
-            }}
-            
-            /* Ensure proper touch scrolling */
-            .bk-plot-wrapper,
-            .bk-canvas-wrapper {{
-                touch-action: pan-x pan-y !important;
-                overflow: visible !important;
-            }}
-        }}
-        
-        /* Extra small mobile devices */
-        @media screen and (max-width: 480px) {{
-            .bk-axis-label, 
-            .bk-axis .bk-axis-label,
-            div[data-bk-view] .bk-axis-label,
-            .bk div.bk-axis-label {{
-                font-size: 18px !important;
-            }}
-            
-            .bk-tick-label,
-            .bk-axis .bk-tick-label,
-            div[data-bk-view] .bk-tick-label,
-            .bk div.bk-tick-label,
-            text.bk-axis-label,
-            text.bk-tick-label {{
-                font-size: 16px !important;
-            }}
-            
-            .bk-title,
-            .bk-plot-layout .bk-title,
-            div[data-bk-view] .bk-title,
-            .bk div.bk-title,
-            .bk-plot-wrapper .bk-title,
-            h1.bk-title {{
-                font-size: 20px !important;
-                font-weight: bold !important;
-            }}
-            
-            .bk-tooltip,
-            .bk-tooltip-content,
-            div.bk-tooltip,
-            div.bk-tooltip-content {{
-                font-size: 16px !important;
-            }}
-            
-            .bk-legend-label,
-            .bk-legend .bk-legend-label,
-            div.bk-legend-label {{
-                font-size: 16px !important;
-            }}
-            
-            .bk-toolbar-button,
-            .bk-btn,
-            .bk-toolbar .bk-toolbar-button {{
-                width: 45px !important;
-                height: 45px !important;
-                font-size: 16px !important;
-            }}
-            
-            /* Target all text elements in Bokeh plots - SVG and HTML */
-            .bk-root text,
-            .bk text,
-            div[data-bk-view] text,
-            svg text,
-            .bk-root svg text,
-            .bk svg text {{
-                font-size: 16px !important;
-            }}
-            
-            /* Ensure proper touch scrolling for small devices */
-            .bk-plot-wrapper,
-            .bk-canvas-wrapper {{
-                touch-action: pan-x pan-y !important;
-                overflow: visible !important;
-            }}
-            
-            /* Prevent touch conflicts */
-            .bk-root .bk-canvas-wrapper text,
-            .bk-root .bk-plot-wrapper text,
-            .bk-plot-layout text,
-            .bk-plot text {{
-                font-size: 16px !important;
-                pointer-events: none !important;
-            }}
-        }}
     </style>
     """
-    
+
     try:
-        # Read the HTML file
-        with open(filename, 'r', encoding='utf-8') as f:
-            html_content = f.read()
-        
-        # Inject the CSS right after the <head> tag
-        if '<head>' in html_content:
-            html_content = html_content.replace('<head>', f'<head>\n{css_style}')
-            
-            # Write back the modified HTML
-            with open(filename, 'w', encoding='utf-8') as f:
-                f.write(html_content)
+        with open(filename, "r", encoding="utf-8") as f:
+            html = f.read()
+        # Remove any existing viewport meta
+        import re
+        html = re.sub(r"<meta[^>]*name=\"viewport\"[^>]*>\s*", "", html, flags=re.IGNORECASE)
+        # Inject our CSS just before </head> if possible
+        if "</head>" in html:
+            html = html.replace("</head>", css_style + "\n</head>")
+        else:
+            html = css_style + html
+        with open(filename, "w", encoding="utf-8") as f:
+            f.write(html)
     except Exception:
-        pass  # Silently fail if we can't modify the HTML
+        pass
 
 
 def _get_bokeh_browser_arg(open_browser: bool):
@@ -813,14 +631,14 @@ def plot(
     is_datetime_index = plot_data["is_datetime_index"]
 
     def new_bokeh_figure(**kwargs):
-        # Set default parameters with full width support
+        # Set default parameters with fixed width (disable responsive/mobile stretch)
         defaults = {
             'x_axis_type': "linear",
             'y_axis_type': "linear", 
             'y_axis_location': "right",
-            'width': plot_width,
+            'width': plot_width or 1200,
             'height': 400,
-            'sizing_mode': 'stretch_width' if plot_width is None else None,  # Full width when no specific width set
+            'sizing_mode': 'stretch_width',
             'tools': "xpan,xwheel_zoom,box_zoom,undo,redo,reset,save",
             'active_drag': "xpan",
             'active_scroll': "xwheel_zoom",
@@ -834,6 +652,10 @@ def plot(
                 'border_fill_color': theme.border_fill_color,
             }
             defaults.update(theme_defaults)
+        
+        # Ensure no responsive sizing passed through
+        # (we keep our own sizing_mode)
+        # kwargs.pop('sizing_mode', None)
         
         # Merge defaults with user kwargs (user takes precedence)
         final_kwargs = {**defaults, **kwargs}
@@ -2278,7 +2100,7 @@ return this.labels[index] || "";
 
     # Always use full width with minimal padding
     kwargs = {
-        "sizing_mode": "stretch_width",  # Always stretch to full width
+        "sizing_mode": "stretch_width",
     }
 
     # Create the main gridplot
@@ -2296,7 +2118,7 @@ return this.labels[index] || "";
     # Apply minimal margins for full width display
     layout_kwargs = {
         'width_policy': "max",  
-        'sizing_mode': "stretch_width",  # Ensure full width
+        'sizing_mode': "stretch_width",
         'margin': (0, 5, 0, 5),  # Minimal 5px padding on sides only
     }
     
