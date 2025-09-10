@@ -29,15 +29,45 @@ try:
 except ModuleNotFoundError:
     display = print
 
-try:
-    from streamlit.runtime.scriptrunner import get_script_run_ctx
+# Lazy loading for Streamlit to avoid warnings when not in Streamlit context
+_streamlit_ctx = None
+_streamlit_st = None
 
-    if get_script_run_ctx():
-        import streamlit as st
+def _get_streamlit_context():
+    """Lazy load Streamlit context and module"""
+    global _streamlit_ctx, _streamlit_st
+    
+    if _streamlit_ctx is None and _streamlit_st is None:
+        try:
+            from streamlit.runtime.scriptrunner import get_script_run_ctx
+            import streamlit as st
+            
+            # Check if we're in a Streamlit context without triggering warnings
+            try:
+                _streamlit_ctx = get_script_run_ctx()
+                _streamlit_st = st
+            except Exception:
+                # Silently handle any context-related exceptions
+                _streamlit_ctx = False
+                _streamlit_st = None
+        except (ModuleNotFoundError, ImportError):
+            _streamlit_ctx = False
+            _streamlit_st = None
+    
+    return _streamlit_ctx, _streamlit_st
 
-        print = display = st.write
-except ModuleNotFoundError:
-    pass
+# Initialize display functions based on context
+def _init_display():
+    """Initialize display functions based on available context"""
+    ctx, st = _get_streamlit_context()
+    
+    if ctx is not None and st is not None:
+        return st.write
+    else:
+        return print
+
+# Set up display function
+display = _init_display()
 
 
 __all__ = [
