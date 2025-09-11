@@ -1031,33 +1031,26 @@ return this.labels[index] || "";
         
         # Add phase highlighting if available
         if hasattr(bt._strategy, 'phase_manager') and hasattr(bt._strategy.phase_manager, 'phase_completion_points'):
-            try:
-                from algo.utils.plotting.phase import calculate_phase_ranges_from_completion_points, render_phase_highlights_with_data
+            from algo.utils.plotting.phase import calculate_phase_ranges_from_completion_points, render_phase_highlights_with_data
+            
+            # Get the first ticker for phase data (assuming main chart shows first ticker)
+            if tickers_to_plot and len(tickers_to_plot) > 0:
+                ticker = tickers_to_plot[0]
                 
-                # Get the first ticker for phase data (assuming main chart shows first ticker)
-                if tickers_to_plot and len(tickers_to_plot) > 0:
-                    ticker = tickers_to_plot[0]
-                    
-                    # Calculate phase ranges
-                    phase_data = {'completion_points': bt._strategy.phase_manager.phase_completion_points}
-                    symbol_data = bt._strategy.data  # Assuming this has the price data
-                    symbol_trades = pd.DataFrame()  # Empty trades for now
-                    
-                    phase_ranges = calculate_phase_ranges_from_completion_points(
-                        phase_data['completion_points'], ticker, symbol_data, symbol_trades
-                    )
-                    
-                    # Get volume data range for proper scaling
-                    volume_data = source.data['Volume']
-                    volume_max = max(volume_data) if volume_data else 1
-                    volume_range = volume_max
-                    
-                    # Apply phase highlights to main volume chart
-                    render_phase_highlights_with_data(fig, phase_ranges, volume_max, volume_range)
-            except (ImportError, AttributeError, KeyError):
-                # Skip phase highlighting if not available
-                pass
-        
+                # Calculate phase ranges
+                phase_data = {'completion_points': bt._strategy.phase_manager.phase_completion_points}
+                
+                phase_ranges = calculate_phase_ranges_from_completion_points(
+                    phase_data['completion_points'], ticker, bt._strategy.data
+                )
+                
+                # Get volume data range for proper scaling
+                volume_data = source.data['Volume']
+                volume_max = max(volume_data) if volume_data else 1
+                volume_range = volume_max
+                
+                # Apply phase highlights to main volume chart
+                render_phase_highlights_with_data(fig, phase_ranges, volume_max, volume_range)
         # Add white vertical lines at the beginning of each month
         if is_datetime_index:
             from bokeh.models import Span
@@ -1873,7 +1866,7 @@ return this.labels[index] || "";
                 
                 # Calculate phase ranges using the new function
                 phase_ranges = calculate_phase_ranges_from_completion_points(
-                    phase_data["completion_points"], symbol, symbol_data, symbol_trades
+                    phase_data["completion_points"], symbol, symbol_data
                 )
                 
                 # Render phase highlights using the new function
